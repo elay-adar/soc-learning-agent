@@ -1,0 +1,28 @@
+{
+ "resultsPerPage": 1,
+ "startIndex": 0,
+ "totalResults": 1,
+ "format": "NVD_CVE",
+ "version": "2.0",
+ "timestamp": "2026-09-24T05:00:00.000",
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2099-0002",
+    "sourceIdentifier": "cve@mitre.org",
+    "published": "2099-03-01T08:00:00.000",
+    "lastModified": "2099-03-01T09:00:00.000",
+    "vulnStatus": "Awaiting Analysis",
+    "cveTags": [],
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "Example flaw that NVD has not analyzed yet."
+     }
+    ],
+    "metrics": {},
+    "references": []
+   }
+  }
+ ]
+}
