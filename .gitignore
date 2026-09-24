@@ -1,1 +1,31 @@
+# Secrets
+.env
+.env.*
 
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Node (only if used for Mermaid validation)
+node_modules/
+
+# Agent runtime output
+sessions/
+exports/
+*.log
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS and editor
+Thumbs.db
+.vscode/
+.idea/
