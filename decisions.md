@@ -180,3 +180,15 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 
 **Decision:** Build a thin end-to-end slice first (one topic, stages 1 and 2, one diagram, three questions), then widen. Test on Log4Shell (CVE-2021-44228) and Kerberoasting to check dynamic behavior. Free-text discovery and stages 4 and 5 come after milestone 6.
 **Why:** The right number of stages and the quality of the output can only be judged on real topics. The specification is updated from what the prototype shows.
+
+---
+
+## D-018: Order of the affected-products field
+
+**Date:** 2026-09-25 | **Status:** Accepted
+
+**Context:** The triage card lists at most 15 affected products. NVD lists them in an arbitrary order, and the parser cut the list to the first 15 before any ordering. For CVE-2021-44228 the card began with Siemens firmware, and the Log4j product itself was sixth. A product beyond the 15th could be dropped entirely, even if CISA KEV names it.
+**Decision:** The NVD parser keeps every affected product, deduplicated, in NVD order. `src/facts.py` orders them: products matching the vendor and product named in the KEV entry first, then the rest alphabetically, then cuts to 15 and states the remainder as "(and N more)". A product matches when the vendor is equal and the product names are equal or one is a prefix of the other, both compared case-insensitively with everything except letters and digits removed (KEV "Log4j2" matches NVD "log4j"). If nothing matches, the CVE is not in KEV, or KEV could not be checked, nothing is put first and the list is alphabetical.
+**Alternatives considered:** Keeping the NVD order (arbitrary and hides the relevant product); exact-name matching only (misses "Log4j2" against "log4j"); picking the product with a model call (costs usage, breaks the rule that tests never call a model, and a guess could be wrong).
+**Why:** The card should lead with the product the official exploitation record names. Ordering in code is deterministic and testable, and it guesses nothing: an unmatched product is left alone, not pinned.
+**Consequences:** Prefix matching can pin more than one product, for example every "Windows ..." product for a KEV "Windows" entry, and can miss a vendor spelled differently in the two sources. In both cases the field stays accurate and only its ordering is affected. The cap of 15 moved from `src/sources/nvd.py` to `src/facts.py`. Tests: `tests/test_facts.py` and `tests/test_nvd.py`. Implemented in commit 652ee29.
