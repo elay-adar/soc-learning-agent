@@ -3,7 +3,7 @@
 # Read with the stdlib "tomllib" (Python 3.11+) -- no extra dependency needed.
 
 [researcher]
-model = "sonnet-5"
+model = "claude-sonnet-5"
 effort = "medium"
 max_turns = 20            # hard stop on turns per run, across all tools combined
 max_schema_retries = 2    # times the agent may correct an invalid KnowledgePack before giving up

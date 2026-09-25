@@ -205,3 +205,21 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 **Why:** 20 turns covers a normal run (5-8 turns for a CVE with a source-rich record) with margin for harder topics (for example Kerberoasting, with no CVE), while still stopping a runaway loop early. 2 correction attempts is usually enough for formatting mistakes; a Pack still invalid after 3 total attempts likely needs a prompt fix, not more retries.
 **Consequences:** Both numbers live in `config/settings.yaml` and can be tuned without touching code. `src/` reads them instead of hard-coding.
 
+---
+
+## D-020: Researcher agent design (Milestone 2 part B)
+
+**Date:** 2026-09-25 | **Status:** Accepted
+
+**Context:** D-019 set the run limits. Building the agent needed further choices about config format, tools, who owns which fact, and how claims are checked.
+**Decision:**
+- Config format: `config/settings.toml`, read with the standard-library `tomllib` (no new dependency). This supersedes the file name and format in D-019 (`settings.yaml`). The values are unchanged except the model ID: `claude-sonnet-5`. The SDK rejected `sonnet-5` ("unrecognized_model") in the first live run.
+- Tools: three read-only tools (NVD, CISA KEV, ATT&CK) in an in-process server. CWE ids come from the NVD tool. EPSS, vendor advisories and official incident disclosures are not built yet. Built-in tools, other MCP servers, settings files, skills, plugins and subagents are off, and code checks this on every run (`assert_read_only`). `permission_mode` is `dontAsk`: anything not pre-approved is denied instead of prompted.
+- Ownership: code collects the facts first (topic, exploitation status, triage fields). The agent may only add mechanism, attack steps, incidents, detection items, response items and conflicts. Setting any other field is rejected, not ignored.
+- Claim checks in code: every source URL the agent cites must be an official domain (nvd.nist.gov, cisa.gov, attack.mitre.org, cwe.mitre.org, first.org) AND a URL a tool returned during this run. Vendor advisory and incident-disclosure domains will be added to the list when those sources are built.
+- Limits: the turn cap is also counted in our own code across the whole run, corrections included. The run refuses to start if `ANTHROPIC_API_KEY` is set.
+- Tool output is wrapped in `<untrusted_source_data>` markers with the source URL. A marker inside fetched text is removed.
+
+**Alternatives considered:** YAML (needs a new dependency); letting the agent write the whole Pack (it could overwrite source-derived facts); trusting the SDK's `max_turns` alone; an allowed-domain check without the "returned by a tool" check.
+**Why:** Keeps source-derived facts out of the model's reach, and turns "every claim comes from a tool result" into a code check where a prompt alone would not be enough.
+**Consequences:** The URL check proves where a citation came from, not that the page supports the claim. In the first live run (CVE-2021-44228) the agent tagged advice and an unsupported phrase as `documented`. A stricter prompt fixed both in the second run, but this is not enforced in code. Open: a code check that a documented entry quotes its cited result. Also open: whether model-memory detail (for example a `jndi:` search string) tagged `inference` is acceptable in stage 4. Tests: `tests/test_researcher_*.py`, `test_merge.py`, `test_settings.py`. Live run via `scripts/run_researcher.py`.
