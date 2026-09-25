@@ -249,7 +249,7 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 
 ## D-022: Lecturer output rules, Mermaid subset and known limits (Milestone 3)
 
-**Date:** 2026-09-25 | **Status:** Open (draft, awaiting approval)
+**Date:** 2026-09-25 | **Status:** Accepted
 
 **Context:** Milestone 3 adds the Lecturer for stages 1 and 2 and the first diagrams. The first live run on CVE-2021-44228 passed every code check, but reading the output showed two prompt-wording gaps and one noisy checking tool. Node.js is not installed, so Mermaid cannot be rendered or validated by the official tools (spec open question 2).
 **Decision:**
@@ -268,4 +268,4 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 - The URL check proves a citation is in the Pack, not that the sentence is supported (D-020). A `documented` block can carry an extra clause or a plain definition that the Pack does not state, for example "for example through a field the application logs" (run 1) and "Ransomware is malware that locks or steals data..." (both runs).
 - The "describes an attack as having happened" check is a phrase list, not a reading of meaning.
 - Diagram labels have no provenance tag. Run 2's sequence diagram says the attacker endpoint "returns an attacker-controlled code reference", which is more specific than the Pack.
-- The Mermaid check has not yet been compared with real rendering (pending the manual mermaid.live check).
+- The Mermaid check is compared with real rendering only by hand: both diagrams from the CVE-2021-44228 run rendered in mermaid.live (2026-09-25). Two diagrams are a small sample, so a diagram type or syntax we have not seen may still pass the check and fail to draw.
