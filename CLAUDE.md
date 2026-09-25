@@ -53,4 +53,4 @@ SOC Learning Agent: a Python agent that teaches a vulnerability and the attack t
 - Milestone 0 (environment, hello-world agent): done.
 - Milestone 1 (schemas in `src/schemas.py`): done.
 - Milestone 2 part A (facts from NVD, KEV and ATT&CK without a model, `src/sources/`, `src/facts.py`): done.
-- Milestone 2 part B (Researcher as an agent with read-only tools): **not started. Do not begin without approval.**
+- Milestone 2 part B (Researcher as an agent with read-only tools): **approved to start (2026-09-25). Build per D-019 and config/settings.yaml.**

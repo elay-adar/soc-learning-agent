@@ -192,3 +192,16 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 **Alternatives considered:** Keeping the NVD order (arbitrary and hides the relevant product); exact-name matching only (misses "Log4j2" against "log4j"); picking the product with a model call (costs usage, breaks the rule that tests never call a model, and a guess could be wrong).
 **Why:** The card should lead with the product the official exploitation record names. Ordering in code is deterministic and testable, and it guesses nothing: an unmatched product is left alone, not pinned.
 **Consequences:** Prefix matching can pin more than one product, for example every "Windows ..." product for a KEV "Windows" entry, and can miss a vendor spelled differently in the two sources. In both cases the field stays accurate and only its ordering is affected. The cap of 15 moved from `src/sources/nvd.py` to `src/facts.py`. Tests: `tests/test_facts.py` and `tests/test_nvd.py`. Implemented in commit 652ee29.
+
+---
+
+## D-019: Researcher run limits and settings file
+
+**Date:** 2026-09-25 | **Status:** Accepted
+
+**Context:** Milestone 2 part B wraps the Researcher as a real agent loop. An agent loop can in principle run indefinitely (repeated tool calls) or get stuck retrying an invalid Knowledge Pack, and both cost usage from the subscription (D-014).
+**Decision:** A settings file (`config/settings.yaml`) holds model and effort per role instead of hard-coded values. For the Researcher: model `sonnet-5`, effort `medium`, `max_turns: 20` (a hard stop on tool-call turns per run, counted across all tools together, not per tool), `max_schema_retries: 2` (times the agent may correct a Knowledge Pack that failed validation against the schema, before the run gives up and reports failure).
+**Alternatives considered:** Hard-coding these values in `src/` (rejected: every tuning pass would need a code change); a stronger model or higher effort by default (rejected: the Researcher mainly reads structured tool output and assembles it, D-015 already sets Sonnet 5 medium as the default for this kind of work); no turn cap (rejected: an ungoverned agent loop can consume the shared subscription usage limit with no ceiling).
+**Why:** 20 turns covers a normal run (5-8 turns for a CVE with a source-rich record) with margin for harder topics (for example Kerberoasting, with no CVE), while still stopping a runaway loop early. 2 correction attempts is usually enough for formatting mistakes; a Pack still invalid after 3 total attempts likely needs a prompt fix, not more retries.
+**Consequences:** Both numbers live in `config/settings.yaml` and can be tuned without touching code. `src/` reads them instead of hard-coding.
+
