@@ -111,3 +111,20 @@ def test_ties_are_broken_by_label_so_output_is_stable():
     a = sample_claims([stage], _many_entry_pack(), count=1, rng=random.Random(1))[0].matches
     b = sample_claims([stage], _many_entry_pack(), count=1, rng=random.Random(2))[0].matches
     assert a == b
+
+
+def test_documented_chain_details_can_be_sampled_as_claims():
+    from src.frames import build_frames
+    from src.stage_content import StageContent
+    from tests.test_frames import ATTACK, chain_of, chain_pack
+
+    pack = chain_pack()
+    chain = chain_of(pack)
+    stage = StageContent.model_validate(
+        {"stage_number": 3, "key": "attack_chain", "title": "t",
+         "blocks": [{"value": "As explained in stage 2.", "tag": "inference"}],
+         "chain": [c.model_dump(mode="json") for c in chain],
+         "frames": [f.model_dump(mode="json") for f in build_frames(pack, chain)]}
+    )
+    claims = sample_claims([stage], pack, count=10)
+    assert len(claims) == 3 and {c.source_url for c in claims} == {ATTACK}

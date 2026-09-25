@@ -1,0 +1,118 @@
+:root {
+  --bg: #f7f7f9;
+  --surface: #ffffff;
+  --text: #1c1e24;
+  --muted: #5b6070;
+  --border: #d5d8e0;
+  --accent: #2f5fd0;
+  --documented: #1f7a3d;
+  --inference: #8a5a00;
+  --unknown: #6b4fa0;
+  --error: #b3261e;
+  --flash: #fff2c2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161b;
+    --surface: #1d2027;
+    --text: #e8eaf0;
+    --muted: #a3a9b8;
+    --border: #363b48;
+    --accent: #8fb0ff;
+    --documented: #6fd08c;
+    --inference: #e6b85c;
+    --unknown: #c3a8ff;
+    --error: #ff8a80;
+    --flash: #4a4220;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 16px 64px;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header, main { max-width: 860px; margin: 0 auto; }
+h1 { font-size: 1.4rem; margin: 24px 0 4px; }
+.topic { margin: 0; color: var(--muted); font-weight: 600; }
+.status { margin: 4px 0 20px; color: var(--muted); font-size: 0.9rem; }
+.status.problem { color: var(--error); }
+
+.stage {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px 20px 20px;
+  margin: 0 0 24px;
+  scroll-margin-top: 12px;
+}
+.stage.flash { background: var(--flash); }
+.stage h2 { font-size: 1.15rem; margin: 16px 0 12px; }
+
+.block { margin: 0 0 12px; }
+.block p { display: inline; margin: 0; }
+.tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: 1px;
+}
+.tag-documented { color: var(--documented); }
+.tag-inference { color: var(--inference); }
+.tag-unknown { color: var(--unknown); }
+.source { margin-left: 8px; font-size: 0.85rem; color: var(--accent); }
+
+/* Diagrams are drawn for a light background, so the box stays light in dark mode too. */
+.diagram {
+  background: #ffffff;
+  color: #1c1e24;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 16px;
+  overflow-x: auto;
+}
+/* Keep the natural width of a wide diagram (for example a sequence diagram with several
+   participants) and let the box scroll sideways, instead of shrinking the text. */
+.diagram svg { max-width: none; height: auto; }
+
+.glossary { margin-top: 16px; padding-top: 4px; border-top: 1px solid var(--border); }
+.glossary h3 { font-size: 0.95rem; margin: 12px 0 8px; color: var(--muted); }
+.term { margin: 0 0 8px; }
+.term-name { display: block; }
+.term .block { margin: 0; }
+
+.frames { margin-top: 16px; }
+.frame-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.frame-controls button {
+  font: inherit;
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.frame-controls button:disabled { opacity: 0.45; cursor: default; }
+.frame-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.frame-label { color: var(--muted); font-size: 0.9rem; }
+.frame-detail { margin-top: 12px; }
+
+.render-error {
+  margin: 0;
+  color: var(--error);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}

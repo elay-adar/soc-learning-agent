@@ -31,6 +31,41 @@ class StagesRun:
     not_built: list[str] = field(default_factory=list)  # keys of planned stages not written yet
 
 
+async def rerun_stage(
+    pack: KnowledgePack,
+    saved: StagesFile,
+    stage_number: int,
+    lecturer_settings: SingleCallSettings,
+    config: StagesConfig | None = None,
+    *,
+    client_factory: Any = ClaudeSDKClient,
+    environ: Mapping[str, str] = os.environ,
+) -> tuple[StagesFile, RunMetrics]:
+    """Write one stage again from a saved run, without planning again.
+
+    Only the last saved stage can be replaced (later stages would depend on the old text), and
+    only the next stage can be added. The stage before it is read as its previous stage.
+    """
+    written = len(saved.stages)
+    if not 1 <= stage_number <= min(written + 1, saved.plan.stage_count):
+        raise ValueError(
+            f"stage {stage_number} cannot be written now: {written} stages are saved "
+            f"and the plan has {saved.plan.stage_count}"
+        )
+    if stage_number < written:
+        raise ValueError(f"only the last saved stage ({written}) can be written again")
+    if saved.topic != pack.topic:
+        raise ValueError(f"the saved stages are for {saved.topic}, the Pack is for {pack.topic}")
+    kept = saved.stages[: stage_number - 1]
+    lecture = await run_lecturer(
+        pack, saved.plan, stage_number, lecturer_settings, config,
+        previous=kept[-1] if kept else None,
+        earlier=kept,
+        client_factory=client_factory, environ=environ,
+    )
+    return StagesFile(topic=saved.topic, plan=saved.plan, stages=[*kept, lecture.content]), lecture.metrics
+
+
 async def run_stages(
     pack: KnowledgePack,
     planner_settings: SingleCallSettings,
@@ -53,6 +88,7 @@ async def run_stages(
         lecture = await run_lecturer(
             pack, plan, item.number, lecturer_settings, config,
             previous=written[-1] if written else None,
+            earlier=written,
             client_factory=client_factory, environ=environ,
         )
         written.append(lecture.content)

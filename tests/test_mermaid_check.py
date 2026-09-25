@@ -109,7 +109,7 @@ def test_header_must_match_the_diagram_type():
 
 def test_types_without_a_checker_are_refused_not_waved_through():
     with pytest.raises(MermaidError, match="not supported"):
-        check_mermaid(FLOW, DiagramType.KILL_CHAIN_FRAMES)
+        check_mermaid(FLOW, DiagramType.DETECTION_FLOW)
 
 
 def test_size_limit():

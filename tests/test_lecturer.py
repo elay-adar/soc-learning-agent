@@ -218,3 +218,238 @@ def test_stage_1_prompt_forbids_technical_detail_and_stage_2_does_not():
         assert word in system1
     assert "Stage 1 has no technical detail" in system1
     assert "Stage 1 has no technical detail" not in system2
+
+
+# ---- stage 3: attack chain with frames built in code (Milestone 4) ------------------------
+
+ATTACK_PLAN = StagePlan.model_validate(
+    {
+        "stages": [
+            {"number": 1, "key": "overview", "subject": "The story", "depth": "overview", "diagram": "story_flow"},
+            {"number": 2, "key": "why_possible", "subject": "Why", "depth": "technical", "diagram": "architecture"},
+            {"number": 3, "key": "attack_chain", "subject": "The attack", "depth": "technical",
+             "diagram": "kill_chain_frames", "covers_steps": [1, 2, 3]},
+            {"number": 4, "key": "response_prevention", "subject": "Response", "depth": "operational",
+             "diagram": "decision_tree"},
+        ]
+    }
+)
+STAGE2 = StageContent.model_validate_json(
+    stage_json(2, "why_possible", [doc("Input is evaluated by the logger")], "architecture")
+)
+
+
+def chain_json(pack, blocks=None, labels=None, detail_tag="documented"):
+    from tests.test_frames import ATTACK
+
+    labels = labels or [f"Label {s.number}" for s in pack.attack_steps]
+    detail = (lambda n: doc(f"Step {n} action", ATTACK)) if detail_tag == "documented" else (
+        lambda n: inf("Possible scenario: an attacker could act.")
+    )
+    return json.dumps(
+        {"stage_number": 3, "key": "attack_chain", "title": "Attack chain",
+         "blocks": blocks or [inf("As explained in stage 2, input is evaluated.")],
+         "chain": [{"step": s.number, "label": label, "detail": detail(s.number)}
+                   for s, label in zip(pack.attack_steps, labels)]}
+    )
+
+
+def stage3_prompts(pack, previous=STAGE2):
+    item = ATTACK_PLAN.stages[2]
+    return build_lecturer_prompts(pack, ATTACK_PLAN, item, CONFIG.stage_by_key("attack_chain"), previous)
+
+
+def run3(scripts, pack):
+    client = FakeClient(scripts)
+    outcome = asyncio.run(
+        run_lecturer(pack, ATTACK_PLAN, 3, SETTINGS, CONFIG, previous=STAGE2,
+                     client_factory=client.factory(), environ={})
+    )
+    return outcome, client
+
+
+def test_stage3_is_a_built_stage():
+    from src.lecturer import BUILT_KEYS
+
+    assert "attack_chain" in BUILT_KEYS
+
+
+def test_stage3_run_builds_one_frame_per_attack_step_in_code():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack()
+    outcome, client = run3([reply(chain_json(pack))], pack)
+    content = outcome.content
+    assert content.diagram is None and len(content.frames) == 3
+    assert "T1190" in content.frames[0].mermaid  # technique id added by code from the Pack
+    assert client.options.tools == [] and client.options.max_turns == 1
+    assert "Input is evaluated by the logger" in client.prompts[0]  # stage 3 reads stage 2
+
+
+def test_stage3_model_output_with_its_own_frames_is_rejected():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack()
+    data = json.loads(chain_json(pack))
+    data["frames"] = [{"step": 1, "mermaid": FLOW}]
+    with pytest.raises(OutputError, match="frames"):
+        parse_stage(json.dumps(data), pack, ATTACK_PLAN.stages[2])
+
+
+def test_stage3_chain_that_skips_a_step_is_sent_back_with_the_reason():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack()
+    short = json.loads(chain_json(pack))
+    short["chain"] = short["chain"][:2]
+    outcome, client = run3([reply(json.dumps(short)), reply(chain_json(pack))], pack)
+    assert outcome.metrics.attempts == 2 and "one entry per attack step" in client.prompts[1]
+
+
+def test_stage3_label_with_a_quote_is_sent_back():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack()
+    with pytest.raises(OutputError, match="label"):
+        parse_stage(chain_json(pack, labels=['Say "hi"', "b", "c"]), pack, ATTACK_PLAN.stages[2])
+
+
+def test_stage3_prompt_asks_for_a_chain_and_no_diagram():
+    from tests.test_frames import chain_pack
+
+    system, first = stage3_prompts(chain_pack())
+    assert "Refer back to stage 2" in system and "exactly one entry per attack step" in system
+    assert "you write no" in system and "Code builds one frame" in system
+    assert '"chain"' in system and '"frames"' not in system.split("Reply with ONE JSON object")[1]
+    assert "Mermaid in the strict subset" not in system  # no diagram rules for the model
+    assert "attack_steps[3]" in first
+
+
+def test_stage3_prompt_requires_possible_scenario_wording_only_without_documented_exploitation():
+    from tests.test_frames import chain_pack
+
+    documented, _ = stage3_prompts(chain_pack("documented"))
+    assert "Possible scenario" not in documented
+    for status in ("not_documented", "unknown"):
+        system, _ = stage3_prompts(chain_pack(status))
+        assert "tagged inference" in system and "'Possible scenario'" in system
+
+
+def test_stage3_without_documented_exploitation_is_enforced_in_code():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack("not_documented")
+    with pytest.raises(SingleCallFailedError):
+        run3([reply(chain_json(pack))] * 3, pack)  # documented details and no scenario wording
+    outcome, _ = run3([reply(chain_json(pack, blocks=[inf("Possible scenario: input arrives."),],
+                                       detail_tag="inference"))], pack)
+    assert len(outcome.content.frames) == 3
+
+
+def test_schema_in_the_prompt_for_stages_1_and_2_hides_frames_and_chain():
+    system, _ = prompts()
+    tail = system.split("Reply with ONE JSON object")[1]
+    assert '"frames"' not in tail and '"chain"' not in tail and '"diagram"' in tail
+
+
+def test_every_stage_prompt_forbids_naming_the_pack_and_suggests_other_wording():
+    from tests.test_frames import chain_pack
+
+    for system in (prompts()[0], prompts(number=2, previous=STAGE1)[0], stage3_prompts(chain_pack())[0]):
+        assert "Never mention 'the Pack'" in system and "the official sources checked" in system
+
+
+def test_stage_that_mentions_the_pack_is_sent_back_once():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack()
+    bad = chain_json(pack, blocks=[inf("The Pack records three attack steps.")])
+    outcome, client = run3([reply(bad), reply(chain_json(pack))], pack)
+    assert outcome.metrics.attempts == 2 and "learner has never seen" in client.prompts[1]
+
+
+# ---- audience by knowledge domain and the glossary (D-025) ------------------------------------
+
+
+def with_glossary(json_text, *entries):
+    data = json.loads(json_text)
+    data["glossary"] = [
+        {"term": term, "definition": {"value": text, "tag": "inference"}} for term, text in entries
+    ]
+    return json.dumps(data)
+
+
+def test_prompt_describes_the_audience_by_knowledge_domain_not_by_a_term_list():
+    system, _ = prompts()
+    for phrase in ("networking and common protocols", "general SOC terminology", "triage, escalation and containment",
+                   "what SOC tooling does", "THIS vulnerability or technique",
+                   "would a general SOC course have taught this"):
+        assert phrase in system
+    assert "moving toward Tier 2" not in system and "define a technical term the first time" not in system
+
+
+def test_prompt_asks_for_a_glossary_and_no_definitions_inside_blocks():
+    system, _ = prompts()
+    assert '"glossary"' in system and "ONE sentence" in system and "never define them again" in system
+    assert "Do not define terms inside blocks" in system
+    assert '"glossary"' in system.split("Reply with ONE JSON object")[1]  # in the schema shown to the model
+
+
+def test_stage_3_schema_shown_to_the_model_has_a_glossary_too():
+    from tests.test_frames import chain_pack
+
+    system, _ = stage3_prompts(chain_pack())
+    assert '"glossary"' in system.split("Reply with ONE JSON object")[1]
+
+
+def test_user_message_lists_terms_defined_in_all_earlier_stages():
+    from tests.test_frames import chain_pack
+
+    stage1 = StageContent.model_validate_json(with_glossary(stage_json(), ("Log4j2", "A Java logging library.")))
+    stage2 = StageContent.model_validate_json(
+        with_glossary(stage_json(2, "why_possible", [doc("Input is evaluated by the logger")], "architecture"),
+                      ("JNDI", "A Java naming feature."))
+    )
+    item = ATTACK_PLAN.stages[2]
+    _, first = build_lecturer_prompts(chain_pack(), ATTACK_PLAN, item, CONFIG.stage_by_key("attack_chain"),
+                                      stage2, [stage1, stage2])
+    assert "Terms already defined in earlier stages" in first and "Log4j2; JNDI" in first
+    _, none_yet = prompts()
+    assert "Terms already defined" not in none_yet
+
+
+def test_a_glossary_term_defined_in_an_earlier_stage_is_sent_back_with_the_term_named():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack()
+    earlier = StageContent.model_validate_json(with_glossary(stage_json(), ("JNDI", "A Java naming feature.")))
+    bad = with_glossary(chain_json(pack), ("jndi", "A Java naming feature."))
+    good = with_glossary(chain_json(pack), ("Kill chain", "The ordered steps of an attack."))
+    client = FakeClient([reply(bad), reply(good)])
+    outcome = asyncio.run(
+        run_lecturer(pack, ATTACK_PLAN, 3, SETTINGS, CONFIG, previous=STAGE2, earlier=[earlier, STAGE2],
+                     client_factory=client.factory(), environ={})
+    )
+    assert outcome.metrics.attempts == 2
+    assert "'jndi' was already defined in stage 1" in client.prompts[1]
+    assert [g.term for g in outcome.content.glossary] == ["Kill chain"]
+
+
+def test_without_an_earlier_list_the_previous_stage_still_counts():
+    from tests.test_frames import chain_pack
+
+    pack = chain_pack()
+    previous = StageContent.model_validate_json(
+        with_glossary(stage_json(2, "why_possible", [doc("Input is evaluated by the logger")], "architecture"),
+                      ("JNDI", "A Java naming feature."))
+    )
+    with pytest.raises(SingleCallFailedError):
+        client = FakeClient([reply(with_glossary(chain_json(pack), ("JNDI", "A Java naming feature.")))] * 3)
+        asyncio.run(run_lecturer(pack, ATTACK_PLAN, 3, SETTINGS, CONFIG, previous=previous,
+                                 client_factory=client.factory(), environ={}))
+
+
+def test_a_stage_with_a_two_sentence_definition_is_sent_back():
+    bad = with_glossary(stage_json(), ("Log4j2", "A Java library. It writes logs."))
+    with pytest.raises(OutputError, match="ONE sentence"):
+        parse_stage(bad, make_pack(), PLAN.stages[0])

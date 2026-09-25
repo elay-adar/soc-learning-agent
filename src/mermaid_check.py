@@ -5,7 +5,7 @@ narrow, well-understood subset and rejects everything else. A diagram that passe
 in the Mermaid library; a failure is sent back to the model with the line number and reason.
 
 Allowed:
-* flowchart (used for story flow and architecture): quoted labels, edges with optional
+* flowchart (used for story flow, architecture and each kill-chain frame): quoted labels, edges with optional
   quoted labels, subgraphs, classDef, class, style. Every node is defined before it is reused.
 * sequenceDiagram: declared participants, messages, notes, balanced loop/alt/opt blocks.
 Rejected: click and other interactive lines, init directives, HTML in labels, semicolons,
@@ -29,6 +29,7 @@ class MermaidError(ValueError):
 _HEADERS = {
     DiagramType.STORY_FLOW: "flowchart",
     DiagramType.ARCHITECTURE: "flowchart",
+    DiagramType.KILL_CHAIN_FRAMES: "flowchart",  # each frame is a flowchart (src/frames.py)
     DiagramType.SEQUENCE: "sequenceDiagram",
 }
 

@@ -269,3 +269,80 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 - The "describes an attack as having happened" check is a phrase list, not a reading of meaning.
 - Diagram labels have no provenance tag. Run 2's sequence diagram says the attacker endpoint "returns an attacker-controlled code reference", which is more specific than the Pack.
 - The Mermaid check is compared with real rendering only by hand: both diagrams from the CVE-2021-44228 run rendered in mermaid.live (2026-09-25). Two diagrams are a small sample, so a diagram type or syntax we have not seen may still pass the check and fail to draw.
+
+---
+
+## D-023: Stage 3 frames, local page server and vendored Mermaid (Milestone 4)
+
+**Date:** 2026-09-25 | **Status:** Accepted after the live run on CVE-2021-44228 and the manual browser check (reported as passed by the user, 2026-09-25)
+
+**Context:** Milestone 4 adds stage 3 (attack chain) with cumulative frames on the local page (spec sections 7 and 10). It needs a way to draw Mermaid offline, a local server, and a way to build frames that always match the attack steps. Node.js is not installed (spec open question 2).
+**Decision:**
+- **Frames are built in code.** For stage 3 the model returns only `blocks` and a `chain`: per attack step a step number, a label of at most 60 characters and one tagged description. `src/frames.py` builds frame *k* (steps 1 to *k*, step *k* marked `new`, earlier steps `seen`). The MITRE technique id in each frame comes from the Pack, never from the model. The chain must match the Pack's attack steps exactly (same numbers, same order), so the number of frames equals the number of steps by construction. Each frame passes `check_mermaid`, and `check_stage` rebuilds the frames and rejects any that differ. This extends D-022: `kill_chain_frames` is now a supported type, and `StageContent` has either one `diagram` or `frames` plus `chain`, never both (a change to the Milestone 3 schema).
+- **Stage 3 without documented exploitation** (spec section 6.3): every block and every chain description must be tagged `inference` and start with "Possible scenario". Code enforces it. Technique ids named in the text must exist in the Pack (a sub-technique is accepted when its parent id is in the Pack).
+- **The learner never sees the word "Pack".** Text and titles that contain "pack" or "knowledge pack" are rejected in code, and the prompt suggests "the official sources checked". The first live run leaked the word in stage 3 (and in stages 1 and 2).
+- **Node.js is not needed** (answers spec open question 2). The strict Python subset check stays the gate. The real Mermaid library in the browser is the second check, and a frame that fails to draw shows an error box on the page.
+- **Mermaid is vendored, pinned and hash-checked.** `web/vendor/mermaid.min.js`, version 11.17.2 (MIT), SHA-256 in `web/vendor/README.md` and `tests/test_vendor.py`. It was compared byte for byte with the official npm tarball, whose SHA-512 matched the registry's published integrity value. `.gitattributes` marks `web/vendor/*` as `-text` so line endings cannot change the hash. Version 12.0.0 exists on npm; 11.x was chosen on request.
+- **The local server uses only the standard library** (`http.server`), no new dependency. It listens on 127.0.0.1 (default port 8765, a free port if busy, with address reuse off so the fallback also works on Windows). Every request needs the per-session token (32 random bytes, moved from the terminal's address into an HttpOnly, SameSite=Strict cookie and redirected away). The `Host` header must be the server's own address (blocks DNS rebinding), and an `Origin` header, when present, must be the server's own origin. Only GET is accepted (the quiz POST comes in Milestone 5). Only four fixed files are served. Nothing is logged, because the request line can hold the token.
+- **Content-Security-Policy:** `default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'` plus base-uri, form-action and frame-ancestors limits. `'unsafe-inline'` is for styles only, because Mermaid puts a `<style>` element in each SVG. No `unsafe-eval`: the bundle has no `eval(` or `new Function(`.
+- **Page behaviour:** it polls `/api/state` every second (spec open question 5: polling for now), appends new stages without rebuilding old ones, sends only revealed stages, and puts all agent text in with `textContent`. The only `innerHTML` is the SVG Mermaid draws with `securityLevel: "strict"` and HTML labels off. Diagram boxes stay white in dark mode, because diagram colors are chosen for a light background.
+- **Terminal commands:** `next`, `repeat N`, `help`, `quit`. None calls a model. `scripts/serve_stages.py` shows saved stages, or `--demo` shows invented sample data (`src/demo.py`, all blocks tagged `inference`, run through the real rules in tests). `scripts/run_stages.py --stage N --confirm` writes one stage again from the saved run with no Planner call, and only the last saved stage can be replaced (later stages read earlier ones).
+
+**Alternatives considered:** Letting the model write frame Mermaid (frame count and order could drift from the steps, contradicting spec section 7); a CDN script tag (breaks offline use and adds a network dependency); `npm install mermaid` or `mermaid-cli` (needs Node, not approved); Starlette and uvicorn (installed only as side effects of `mcp`, not approved dependencies); loosening the CSP to `unsafe-eval` up front (only if the browser shows it is needed); a headless browser for JavaScript tests (a new tool chain).
+**Why:** Frames derived from the Pack's step list are correct by construction and testable. A pinned, hashed, local library keeps the page offline and reviewable. A small stdlib server with token, Host and Origin checks covers the local-server risk in spec section 10 without new dependencies.
+**Consequences:** Tests cover the frame builder, the stage 3 rules, the server security checks, the terminal commands, the demo data and the vendored hash. They cannot cover the page's JavaScript (Previous and Next, drawing, scroll position, highlighting): that is checked by hand in a browser. Diagram drawing is still checked by the real library only by hand (D-022 limit). The plan's stage count (4) is larger than the written stages (3) until stages 4 and 5 are built.
+**Known limits, seen in the live runs on CVE-2021-44228 (2026-09-25):**
+- The Pack recorded 2 attack steps, so stage 3 has 2 frames: the frame count is proven on real data only up to that size. The frame and server tests use up to 8 steps.
+- A `documented` block can carry a clause the source does not state, for example "so this chain has been used in real attacks" (KEV says exploited in the wild) and "As explained in stage 2, this works because…" appended to an NVD sentence. The URL check cannot see this (D-020, D-022).
+- Stages 1 and 2 in the saved run still contain the word "Pack", because only stage 3 was rewritten after the rule was added. A full re-run fixes it.
+- The "pack" check is a regular expression, so a legitimate use of the word "pack" would be rejected and the model asked to reword it.
+- Usage reported by the SDK: about $0.17 for the Planner plus stages 1 to 3, and about $0.05 for one stage re-run (Sonnet 5, medium effort). This is the SDK's reported number, not a bill (D-014).
+
+---
+
+## D-024: Progressive frames for a complex mechanism diagram (to discuss after Milestone 4)
+
+**Date:** 2026-09-25 | **Status:** Open (not decided, nothing built)
+
+**Context:** Stage 3 shows the attack chain as cumulative frames built in code from the Knowledge Pack's `attack_steps` (D-023). Stage 2's mechanism diagram (for example the Log4j sequence diagram with four participants and eight messages) is one static picture and can be wide and dense.
+**Question:** Should a complex stage 2 mechanism be shown as progressive frames too, the way stage 3 works?
+**What it would take (an architecture change, not a rendering tweak):**
+- A new structured `mechanism_steps` field in the Knowledge Pack schema, similar to `attack_steps`: numbered, each a `SourcedValue`, so the Researcher records the mechanism as ordered steps with sources.
+- Researcher changes: its prompt, the ownership rules of D-020 (what the agent may add), and the merge and claim checks.
+- Stage 2 changes: frames built in code from those steps, a rule that the chain covers every step, and a diagram type or plan option so the Planner can choose a single diagram or frames per topic. Sequence diagrams would need a frame builder of their own (participants stay fixed, messages are added one by one).
+- Schema, plan rules, Lecturer prompt, page and tests all change, and the saved Knowledge Packs would need a re-run.
+**Not doing now:** Milestone 4 is closed first. Until then a wide stage 2 diagram scrolls sideways in its box (`overflow-x: auto`, natural width) instead of shrinking.
+**To settle when discussed:** whether the gain justifies the change, whether it applies to every topic or only complex ones, and how the Planner decides.
+
+---
+
+## D-025: Audience by knowledge domain, and a per-stage glossary that never repeats
+
+**Date:** 2026-09-25 | **Status:** Accepted (design approved by the user before the build; the first live run is recorded below)
+
+**Context:** The Lecturer's prompt said "Tier 1 SOC analyst moving toward Tier 2 ... define a technical term the first time you use it". That left open what counts as a technical term. The first live run defined some terms inside blocks ("Plain-English terms: JNDI is ... LDAP is ..."), and nothing stopped a later stage from defining the same term again.
+**Decision:**
+- The audience is described by knowledge domains, not a list of terms: networking and common protocols, general SOC terminology, analyst workflow (triage, escalation, containment), and familiarity with what SOC tooling does. The Lecturer always defines what is specific to this exact vulnerability or technique (its component, feature and setting names, protocol variants, and the names of the weakness and attack). Which terms count as specific stays a model judgment. Code does not decide it and no term list exists.
+- Each stage carries a structured `glossary`: entries of `term` and `definition`. The definition is a `SourcedValue` (one sentence, tagged documented, inference or unknown like any block), so provenance and the "cite a URL from the Pack" check apply to it.
+- Enforced in code (`src/glossary.py`, `src/stage_rules.py`): a term is never defined twice in the same run.
+  - A term is normalized (case, spacing, surrounding punctuation, a plain trailing plural). A parenthetical expansion counts as an alias, so "JNDI (Java Naming and Directory Interface)" collides with "JNDI".
+  - Every glossary entry of a stage is checked against the entries of all earlier stages of the run and against the other entries of the same stage. A collision sends the stage back with the term and the earlier stage named.
+  - The Lecturer receives the list of already defined terms, and `rerun_stage` passes the kept stages' glossaries, so a re-run of stage 3 sees the terms from stages 1 and 2.
+  - A definition must be a single sentence (no line break, at most 200 characters, no second sentence). A term is at most 60 characters.
+  - Glossary text is also covered by the existing checks: URL in the Pack, the "Pack" wording rule, and the phrases that present an attack as real. The "Possible scenario" wording of stage 3 does not apply to definitions. Documented definitions can be sampled by the trace check.
+- The page shows a "New terms" list under each stage's text. Saved stages files stay valid, because `glossary` defaults to an empty list.
+- Model and effort do not change: Sonnet 5 at medium effort (D-015). No capability gap has been measured. Deciding whether a term is specific to a topic is a judgment of the same kind the Lecturer already makes when it chooses between documented and inference. Revisit if manual review shows repeated over- or under-defining, or repeated redefinition rejections.
+
+**Alternatives considered:** A fixed list of terms to define or skip (goes stale, cannot cover a new topic); a code rule for "specific" terms (no reliable way to tell, D-022); one glossary for the whole run at the end (the learner needs a term when it first appears); a plain-string glossary without provenance (a model-memory definition would carry no tag, against D-005); a stronger model or higher effort for the Lecturer (no measured gap, D-015).
+**Consequences:** Schema change (`StageContent` and `AttackChainDraft` gain `glossary`), rules, Lecturer prompt, `run_lecturer` and `rerun_stage` (they pass the earlier stages), the page, the demo data and tests.
+**Known limits:**
+- Code cannot tell whether the right terms were defined. It only stops repeats. Under-defining (a vulnerability-specific term left unexplained) and over-defining (a general SOC term explained) are checked by reading the output.
+- Synonyms and reworded terms ("lookup" versus "message lookup substitution") are not detected as repeats, and a term defined inside a block is not detected. The prompt forbids it, code does not.
+- "One sentence" is a text heuristic. Abbreviations such as "e.g." are skipped, so a second sentence right after "etc." is not seen.
+- An empty glossary is allowed, since a stage may introduce nothing new. That is a judgment, not a rule.
+- Definitions from model memory tagged inference are the same open question as in D-020 and D-022.
+
+**First live run (CVE-2021-44228, 2026-09-25, Sonnet 5 medium):** Planner and stages 1 to 3 each passed on the first attempt, about $0.21 reported in total. Glossary sizes were 2 terms (stage 1: Log4j2, CISA KEV catalog), 4 terms (stage 2: JNDI, LDAP, Message lookup substitution, Remote code execution) and 0 (stage 3). No term was repeated, and no learner text or glossary mentions the Pack. Read by eye, three things stand out:
+- Stage 2 also explains JNDI and remote code execution inside blocks, next to the glossary entries. The prompt forbids this and code cannot see it (a stated limit).
+- "Remote code execution" and "CISA KEV catalog" may be terms a general SOC course already teaches, so they could count as over-defining. This is the judgment the decision leaves to the model, and nothing here is measured yet.
+- Stage 3 introduced no new term, so its glossary is empty, which is allowed.

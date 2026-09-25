@@ -51,7 +51,7 @@ def sample_claims(
     documented: list[Claim] = []
     skipped = 0
     for stage in stages:
-        for block in stage.blocks:
+        for block in stage.all_tagged():
             if block.tag != ProvenanceTag.DOCUMENTED:
                 skipped += 1
                 continue

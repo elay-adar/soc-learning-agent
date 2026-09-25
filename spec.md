@@ -89,7 +89,8 @@ These rules are enforced in code, not only in prompts. A validation step compare
 - The agent chooses the diagram type that helps understanding most: flow, sequence, timeline or architecture, from a list of allowed types per stage.
 - A multi-step diagram is built from **frames**. Frame 1 shows the first attack step, each next frame adds the following step and highlights what is new, until the full picture is shown. Frames are generated from the list of steps in the attack chain, not freely. The page provides Previous and Next controls.
 - Each frame's syntax is validated before it is saved. On error the agent fixes it and retries.
-- The Mermaid library is stored locally in the repository so the page works offline. Validation may require Node.js; to be decided in the prototype.
+- The Mermaid library is stored locally in the repository (`web/vendor/`, pinned version, hash-checked) so the page works offline. Node.js is not needed: syntax is checked by a strict Python subset check, and the library in the browser is the second check (D-022, D-023).
+- Frames are built by code from the attack steps in the Knowledge Pack. The model supplies only a short label and a tagged description per step (D-023).
 
 ## 8. Sources and provenance
 
@@ -179,13 +180,14 @@ input (CVE ID or topic)
 ## 15. Open questions
 
 1. How many stages are optimal? The plan uses 3 to 5 as guidance, to be settled on real topics.
-2. Whether Node.js is needed to validate Mermaid syntax.
+2. ~~Whether Node.js is needed to validate Mermaid syntax.~~ Settled: not needed (D-022, D-023).
 3. Whether all dependencies install on Python 3.14.
 4. How subscription authentication works on Windows, and how much of the usage limit a run consumes.
-5. Polling or server-sent events for page updates.
+5. Polling or server-sent events for page updates. Polling is used for now (D-023); revisit if it feels slow.
 6. Which library produces the PDF export.
 7. The exact timeout for an abandoned quiz.
 8. The final list of terminal commands.
+9. Whether a complex stage 2 mechanism should also be shown as progressive frames, which needs a structured `mechanism_steps` field in the Knowledge Pack (D-024, to discuss after Milestone 4).
 
 ## 16. Milestones
 
