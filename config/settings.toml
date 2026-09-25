@@ -7,3 +7,14 @@ model = "claude-sonnet-5"
 effort = "medium"
 max_turns = 20            # hard stop on turns per run, across all tools combined
 max_schema_retries = 2    # times the agent may correct an invalid KnowledgePack before giving up
+
+# Planner and Lecturer are single calls with no tools, so there is no turn cap.
+[planner]
+model = "claude-sonnet-5"
+effort = "medium"
+max_schema_retries = 2    # times the Planner may correct an invalid StagePlan before giving up
+
+[lecturer]
+model = "claude-sonnet-5"
+effort = "medium"
+max_schema_retries = 2    # times the Lecturer may correct an invalid stage before giving up

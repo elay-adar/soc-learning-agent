@@ -54,3 +54,4 @@ SOC Learning Agent: a Python agent that teaches a vulnerability and the attack t
 - Milestone 1 (schemas in `src/schemas.py`): done.
 - Milestone 2 part A (facts from NVD, KEV and ATT&CK without a model, `src/sources/`, `src/facts.py`): done.
 - Milestone 2 part B (Researcher as an agent with read-only tools, D-019 and D-020): done. Live run on CVE-2021-44228 and the manual check of five fields against the official pages passed (2026-09-25).
+- Milestone 3 (Planner, stages 1 and 2, one diagram per stage: `src/planner.py`, `src/lecturer.py`, `src/stage_rules.py`, `src/mermaid_check.py`, D-021 and D-022): done. Live run on CVE-2021-44228 passed twice (2026-09-25). Known limits are listed in D-022.

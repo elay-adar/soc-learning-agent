@@ -205,7 +205,8 @@ class KnowledgePack(StrictModel):
 
 
 class StagePlanItem(StrictModel):
-    number: int = Field(ge=1)
+    number: int = Field(ge=1)  # position in this plan, 1..n without gaps
+    key: str = Field(min_length=1)  # which definition in config/stages.toml this stage uses
     subject: str = Field(min_length=1)
     depth: Depth
     diagram: DiagramType

@@ -1,0 +1,46 @@
+# Stage definitions (spec section 6.2). Change them here instead of editing code.
+# Read with the stdlib "tomllib" -- no extra dependency (D-020).
+#
+# allowed_depths and allowed_diagrams are checked against the closed lists in src/schemas.py.
+# The Planner picks from them; code rejects a plan that picks anything else.
+# "content" is what the Lecturer is asked to cover; it is used in prompts, not enforced.
+
+[[stage]]
+number = 1
+key = "overview"
+subject = "Overview"
+allowed_depths = ["overview"]
+allowed_diagrams = ["story_flow"]
+content = "The vulnerability and the attack that followed as one story: who was affected, damage to the organization, rough timeline, what the attacker gained. No technical detail."
+
+[[stage]]
+number = 2
+key = "why_possible"
+subject = "Why it is possible"
+allowed_depths = ["conceptual", "technical"]
+allowed_diagrams = ["architecture", "sequence"]
+content = "The only in-depth technical explanation of the weakness: the component and its normal function, root cause and CWE, the failure mechanism step by step, preconditions, scope, and what the fix changes."
+
+[[stage]]
+number = 3
+key = "attack_chain"
+subject = "Attack chain"
+allowed_depths = ["technical"]
+allowed_diagrams = ["kill_chain_frames"]
+content = "What the attacker does at each step and which weakness from stage 2 enables it. Refers back to stage 2. Includes the MITRE ATT&CK mapping."
+
+[[stage]]
+number = 4
+key = "analyst_view"
+subject = "What an analyst sees"
+allowed_depths = ["operational"]
+allowed_diagrams = ["detection_flow"]
+content = "Telemetry per attack step, event IDs and key fields, detection logic, published IOCs with dates, false positives, and detection gaps."
+
+[[stage]]
+number = 5
+key = "response_prevention"
+subject = "Response and prevention"
+allowed_depths = ["operational"]
+allowed_diagrams = ["decision_tree"]
+content = "Triage questions and outcomes, the Tier 1 boundary, containment options and side effects, eradication and recovery, hardening, and lessons."

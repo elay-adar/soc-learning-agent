@@ -56,9 +56,16 @@ def valid_pack() -> dict:
 def valid_plan() -> dict:
     return {
         "stages": [
-            {"number": 1, "subject": "Overview", "depth": "overview", "diagram": "story_flow"},
+            {
+                "number": 1,
+                "key": "overview",
+                "subject": "Overview",
+                "depth": "overview",
+                "diagram": "story_flow",
+            },
             {
                 "number": 2,
+                "key": "attack_chain",
                 "subject": "Attack chain",
                 "depth": "technical",
                 "diagram": "kill_chain_frames",
@@ -172,5 +179,12 @@ def test_plan_referring_to_missing_step_is_rejected():
 def test_plan_numbering_gap_is_rejected():
     data = valid_plan()
     data["stages"][1]["number"] = 4
+    with pytest.raises(ValidationError):
+        StagePlan.model_validate(data)
+
+
+def test_plan_stage_needs_a_key():
+    data = valid_plan()
+    del data["stages"][0]["key"]
     with pytest.raises(ValidationError):
         StagePlan.model_validate(data)

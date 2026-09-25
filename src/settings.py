@@ -28,10 +28,25 @@ class ResearcherSettings(BaseModel):
     max_schema_retries: int = Field(ge=0)  # corrections allowed after an invalid Pack
 
 
+class SingleCallSettings(BaseModel):
+    """Settings for a role that makes single calls with no tools (Planner, Lecturer).
+
+    There is no turn cap: one call is one turn. Only the correction cap applies.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str = Field(min_length=1)
+    effort: Literal["low", "medium", "high", "xhigh", "max"]
+    max_schema_retries: int = Field(ge=0)  # corrections allowed after an invalid output
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     researcher: ResearcherSettings
+    planner: SingleCallSettings
+    lecturer: SingleCallSettings
 
 
 def load_settings(path: Path = DEFAULT_SETTINGS_PATH) -> Settings:

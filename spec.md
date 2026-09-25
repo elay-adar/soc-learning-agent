@@ -147,7 +147,7 @@ input (CVE ID or topic)
 - The **Knowledge Pack** is the only shared state. Components never talk to each other directly.
 - Only the Researcher runs as a real agent loop with tools. Planner, Lecturer and Examiner are single calls that return output checked against a schema.
 - Model and effort level are configured per role in a settings file. Default: Sonnet 5 at medium effort. A stronger model may be used for planning if measurement shows a benefit.
-- Stage definitions and levels live in a configuration file (YAML), not in code.
+- Stage definitions and levels live in a configuration file (TOML, D-020 and D-021), not in code.
 - Schemas are defined with Pydantic. Every output is validated; an invalid output is sent back for correction.
 
 ## 12. Constraints

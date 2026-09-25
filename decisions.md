@@ -223,3 +223,49 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 **Alternatives considered:** YAML (needs a new dependency); letting the agent write the whole Pack (it could overwrite source-derived facts); trusting the SDK's `max_turns` alone; an allowed-domain check without the "returned by a tool" check.
 **Why:** Keeps source-derived facts out of the model's reach, and turns "every claim comes from a tool result" into a code check where a prompt alone would not be enough.
 **Consequences:** The URL check proves where a citation came from, not that the page supports the claim. In the first live run (CVE-2021-44228) the agent tagged advice and an unsupported phrase as `documented`. A stricter prompt fixed both in the second run, but this is not enforced in code. Open: a code check that a documented entry quotes its cited result. Also open: whether model-memory detail (for example a `jndi:` search string) tagged `inference` is acceptable in stage 4. Tests: `tests/test_researcher_*.py`, `test_merge.py`, `test_settings.py`. Live run via `scripts/run_researcher.py`.
+
+---
+
+## D-021: Planner design and stage plan rules (Milestone 3)
+
+**Date:** 2026-09-25 | **Status:** Accepted
+
+**Context:** Milestone 3 adds the Planner. Spec section 6.1 leaves the stage count as guidance (3 to 5) and does not say which stages a short plan keeps. The plan's stage numbers (1..n in the plan) also stop matching the definition numbers once a stage is skipped, so a plan item needs a way to name its definition.
+**Decision:**
+- Stage definitions live in `config/stages.toml`, read with the standard-library `tomllib` and checked with Pydantic. This supersedes "YAML" in spec section 11 (same reason as D-020: no new dependency). `spec.md` section 11 still needs that one-word fix.
+- `StagePlanItem` gets a required `key` field naming its definition (`overview`, `why_possible`, `attack_chain`, `analyst_view`, `response_prevention`). `number` stays the position in the plan.
+- Every plan must contain `overview`, `why_possible` and `response_prevention`. A 3-stage plan is exactly those three (chosen by the user). `attack_chain` and `analyst_view` are optional, so a plan has 3 to 5 stages. Stages must be in definition order with no repeats. The count guidance (3 simple, 4 medium, 5 complex) stays in the Planner's prompt only.
+- `depth` and `diagram` must be in the allowed lists of the stage's definition. `timeline` is not allowed in any stage yet, because the spec's stage table does not list it.
+- `attack_chain` must cover every attack step in the Pack and cannot be planned when the Pack has no attack steps, because its frames are generated from those steps (D-008).
+- All of this is checked in code (`src/plan_rules.py`). All problems are reported together, and a rejected plan is sent back with the reasons, up to `max_schema_retries`.
+- The Planner and Lecturer share one tool-less call helper (`src/single_call.py`): no built-in tools, no MCP servers, no settings, skills or subagents, `max_turns` fixed at 1, and code checks this on every run. Model, effort and retry cap come from `config/settings.toml`. The run refuses to start when `ANTHROPIC_API_KEY` is set.
+- The Knowledge Pack goes to the Planner wrapped as untrusted data, because its text came from external sources.
+
+**Alternatives considered:** Matching plan stages to definitions by subject text (fragile, the Planner chooses topic-specific subjects); making only stages 1 and 2 required (a plan could then end without response and prevention); letting the Planner choose any diagram type (the spec limits types per stage); a separate copy of the retry loop for each role (duplicated code).
+**Why:** The rules that must always hold are code, not prompt (CLAUDE.md). A required stage 5 means every topic ends with what an analyst does about it.
+**Consequences:** `StagePlanItem` changed after Milestone 1; `tests/test_schemas.py` was updated. A stage 3 without stage 4, or the reverse, is allowed. Stage 5 in a 4-stage plan is my addition to the spec's wording and can be relaxed. Whether `max_turns=1` is accepted by the SDK for a tool-less call is only confirmed by the first live run. Tests: `test_stages_config.py`, `test_plan_rules.py`, `test_single_call.py`, `test_planner.py`, `test_settings.py`.
+
+---
+
+## D-022: Lecturer output rules, Mermaid subset and known limits (Milestone 3)
+
+**Date:** 2026-09-25 | **Status:** Open (draft, awaiting approval)
+
+**Context:** Milestone 3 adds the Lecturer for stages 1 and 2 and the first diagrams. The first live run on CVE-2021-44228 passed every code check, but reading the output showed two prompt-wording gaps and one noisy checking tool. Node.js is not installed, so Mermaid cannot be rendered or validated by the official tools (spec open question 2).
+**Decision:**
+- A stage is a list of blocks, each tagged `documented`, `inference` or `unknown`, plus one diagram. `src/stage_rules.py` checks in code: the stage matches its plan item; every `documented` block cites a URL that is in the Pack; the diagram passes the Mermaid check; and the exploitation-status rules of D-006. When exploitation is documented, stage 1 must cite the evidence or an incident URL and must not say "No documented incident from official sources". When it is not documented or unknown, stage 1 must contain that exact sentence and the word "potential" (and "partial" for unknown), and no text may match a short list of phrases that present an attack as having happened. Stage 2 needs a `documented` block when the Pack documents the weakness.
+- Mermaid is checked by `src/mermaid_check.py`: a strict Python check of a small subset (flowchart with quoted labels, subgraph, classDef/class/style; sequenceDiagram with declared participants). It refuses anything else, including diagram types it cannot check yet. It does not render. Each diagram is rendered by hand once in mermaid.live during Milestone 3. Offline validation is revisited in Milestone 4 when the page loads a local Mermaid library.
+- Two rules stay in the prompt, not in code, on purpose: one source per `documented` block (the user message lists each URL with the Pack fields recorded under it), and no technical detail in stage 1 (no protocols, version numbers, CWE ids or CVSS vectors). Both were added after the first live run. The rerun on the same CVE showed the KEV date and the NVD publication date in separate blocks with their own URLs, and no technical detail in stage 1.
+- The trace check (`src/trace.py`, `scripts/run_stages.py`) samples five `documented` blocks and shows the three Pack entries under the same URL that share the most words with the block.
+
+**Alternatives considered:** Installing Node.js and `mermaid-cli` (a new tool chain, not approved); a loose Mermaid check (would let broken diagrams through); a stronger model for the Lecturer (D-015: no measured capability gap, and both defects were prompt wording); enforcing the two prompt rules in code (no reliable way to tell technical detail from plain wording, and a URL-per-fact check needs a reading of meaning).
+**Why:** The rules that must always hold are in code (CLAUDE.md); rules that need judgement of wording are prompted and checked by a person for now.
+**Consequences:** The prompt-only rules can regress and nothing in code will notice. Tests: `test_mermaid_check.py`, `test_stage_rules.py`, `test_lecturer.py`, `test_trace.py`, `test_orchestrate.py`.
+
+**Open question (matches D-020):** Model-memory detail tagged `inference`. In the first run, stage 2 explained the meaning of CWE-20, CWE-502 and CWE-917 from model memory, labelled as the model's own reading. Whether that is acceptable, or `inference` should be limited to reasoning from Pack facts, is undecided. Not changed now.
+
+**Known limits, seen in the live runs:**
+- The URL check proves a citation is in the Pack, not that the sentence is supported (D-020). A `documented` block can carry an extra clause or a plain definition that the Pack does not state, for example "for example through a field the application logs" (run 1) and "Ransomware is malware that locks or steals data..." (both runs).
+- The "describes an attack as having happened" check is a phrase list, not a reading of meaning.
+- Diagram labels have no provenance tag. Run 2's sequence diagram says the attacker endpoint "returns an attacker-controlled code reference", which is more specific than the Pack.
+- The Mermaid check has not yet been compared with real rendering (pending the manual mermaid.live check).
