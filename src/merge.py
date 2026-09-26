@@ -117,10 +117,32 @@ def normalize_url(url: str) -> str:
     return url.strip().rstrip("/")
 
 
+# Where a secondary source may be used at all (D-027, D-029, D-034): explaining the mechanism and
+# the execution flow. Detection, response and conflicts need other grounding.
+SECONDARY_FIELDS = ("weakness_mechanism", "attack_steps")
+
+
+def _secondary_scope_problems(additions: ResearcherAdditions) -> list[str]:
+    problems: list[str] = []
+    for where, value in _sourced_values(additions):
+        if value.tag == ProvenanceTag.SECONDARY and where.split(".")[0] not in SECONDARY_FIELDS:
+            problems.append(
+                f"{where}: a 'secondary' claim is only allowed for weakness_mechanism and attack_steps; "
+                "tag this entry 'inference' or leave it out"
+            )
+    for i, attack_step in enumerate(additions.attack_steps):
+        if attack_step.action.tag == ProvenanceTag.SECONDARY and attack_step.mitre_technique:
+            problems.append(
+                f"attack_steps.{i}.mitre_technique: a step taken from a secondary source cannot carry an "
+                "ATT&CK technique id, because the page does not map its steps to ATT&CK; leave it out"
+            )
+    return problems
+
+
 def _check_documented_sources(
     additions: ResearcherAdditions, allowed_urls: Collection[str] | None = None
 ) -> None:
-    problems: list[str] = []
+    problems: list[str] = _secondary_scope_problems(additions)
     seen = {normalize_url(u) for u in allowed_urls} if allowed_urls is not None else None
     for where, value in _sourced_values(additions):
         url = value.source_url

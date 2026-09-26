@@ -15,6 +15,7 @@ from src.researcher import (
     SourceUrlError,
     build_system_prompt,
     run_researcher,
+    technique_prompt,
 )
 from src.researcher_tools import TECHNIQUE_ALLOWED_TOOL_NAMES, wrap_untrusted
 from src.schemas import ExploitationStatus, FieldStatus, ProvenanceTag, TopicType
@@ -50,8 +51,8 @@ def steps_answer(url=PAGE, tag="secondary"):
     return json.dumps({
         "weakness_mechanism": [secondary("Service tickets are encrypted with the account's password hash", url)],
         "attack_steps": [
-            {"number": 1, "action": secondary("The attacker lists service accounts", url, tag), "mitre_technique": TECH},
-            {"number": 2, "action": secondary("The attacker requests a service ticket", url, tag), "mitre_technique": TECH},
+            {"number": 1, "action": secondary("The attacker lists service accounts", url, tag)},
+            {"number": 2, "action": secondary("The attacker requests a service ticket", url, tag)},
         ],
     })
 
@@ -110,6 +111,38 @@ def test_technique_system_prompt_states_the_technique_rules():
     for phrase in ("no CVE", "get_secondary_source", '"secondary"', "never output incidents", "untrusted_source_data"):
         assert phrase in prompt
     assert "get_nvd_record" not in prompt
+
+
+def test_technique_prompts_keep_secondary_to_steps_and_mechanism_and_skip_step_mapping():
+    """D-034: the pages feed attack_steps and weakness_mechanism only; no detection, response or step mapping."""
+    system = build_system_prompt(TopicType.TECHNIQUE)
+    assert "Do not output detection_items or response_items" in system
+    assert "Do not set mitre_technique on any step" in system
+    first = technique_prompt(TECH, [PAGE])
+    assert "detection" not in first.lower() and "response" not in first.lower()
+
+
+def test_cve_prompt_limits_secondary_sources_too():
+    prompt = build_system_prompt(TopicType.CVE)
+    assert "never for detection or response items" in prompt and "never set mitre_technique on a secondary step" in prompt
+
+
+def test_a_secondary_detection_item_is_rejected_then_corrected(tmp_path):
+    answer = json.loads(steps_answer())
+    answer["detection_items"] = [{"kind": "telemetry", "content": secondary("Event ID 4769 is logged")}]
+    scripts = [reading(text=json.dumps(answer)), reading()[2:]]
+    outcome, client = run(scripts, tmp_path)
+    assert "only allowed for weakness_mechanism and attack_steps" in client.prompts[1]
+    assert outcome.pack.detection_items == []
+
+
+def test_a_secondary_step_with_a_technique_id_is_rejected_then_corrected(tmp_path):
+    answer = json.loads(steps_answer())
+    answer["attack_steps"][0]["mitre_technique"] = TECH
+    scripts = [reading(text=json.dumps(answer)), reading()[2:]]
+    outcome, client = run(scripts, tmp_path)
+    assert "attack_steps.0.mitre_technique" in client.prompts[1]
+    assert all(step.mitre_technique is None for step in outcome.pack.attack_steps)
 
 
 def test_a_step_citing_a_page_no_tool_returned_is_rejected_then_corrected(tmp_path):

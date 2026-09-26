@@ -178,3 +178,23 @@ def test_cve_id_in_stage_1_is_fine():
 def test_kill_chain_wording_is_rejected(text):
     with pytest.raises(StageRuleError, match="kill chain"):
         check_stage(stage1(inf(text), *(doc("Servers were taken over", NVD),)), make_pack("not_documented"), OVERVIEW)
+
+
+# ---- D-034: secondary steps carry no technique id, so the topic's own id is what stage 3 may name ----
+
+
+def test_stage_3_of_a_technique_may_name_the_topic_id_when_no_step_carries_one():
+    pack = technique_pack()
+    data = pack.model_dump(mode="json")
+    for step_ in data["attack_steps"]:
+        step_["mitre_technique"] = None
+    pack = KnowledgePack.model_validate(data)
+    ok = stage3(pack, blocks=[sec("This flow maps to ATT&CK T1558.003 (Kerberoasting)")])
+    check_stage(ok, pack, CHAIN)
+
+
+def test_stage_3_of_a_technique_still_rejects_other_ids():
+    pack = technique_pack()
+    bad = stage3(pack, blocks=[sec("This also maps to T1078")])
+    with pytest.raises(StageRuleError, match="T1078"):
+        check_stage(bad, pack, CHAIN)

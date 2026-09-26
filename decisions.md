@@ -527,3 +527,25 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 - No live run has used this path yet.
 - Code cannot check that ATT&CK truly lacks a step breakdown before a secondary page is used (D-029), nor that a step is faithful to its page (D-020's limit).
 - There is still no vendor-advisory tool (D-031).
+
+---
+
+## D-034: Secondary sources feed only mechanism and steps; secondary steps carry no ATT&CK mapping
+
+**Date:** 2026-09-26 | **Status:** Accepted
+
+**Context:** The first live technique run on Kerberoasting (T1558.003, D-033) passed every code check on the first attempt, and showed two things the checks did not catch. First, the agent filled 6 detection items and 3 response items, all tagged `secondary`. D-027 and D-029 allow a secondary source for one purpose only, explaining a mechanism or an execution flow, and my technique prompt had invited detection and response items. Second, it set `mitre_technique: T1558.003` on all 6 steps, including "obtain domain credentials", "find SPNs" and "use the account", which T1558.003 does not describe. The pages do not map their steps to ATT&CK, so that mapping was the model's own, presented under a sourced tag.
+
+**Decision:**
+- `src/merge.py` rejects a `secondary` claim anywhere except `weakness_mechanism` and `attack_steps` (detection items, response items and conflict claims are refused). Such an entry must be tagged `inference` or left out. This applies to CVE runs and technique runs alike.
+- `src/merge.py` rejects `mitre_technique` on a step whose action is tagged `secondary`. A `documented` step keeps its mapping. The technique itself stays recorded in the Pack's `attack_technique` triage field.
+- `src/stage_rules.py`: for a technique topic, stage 3 may name the topic's own technique id, since no step carries one now. Any other id is still rejected.
+- The technique prompt tells the agent to leave out detection items, response items and step mappings, and no longer invites them. The CVE prompt limits secondary sources the same way.
+
+**Alternatives considered:** put the rules in the Pack schema (would refuse to load the Pack saved by the first live run, and the rules are about what the agent may add, which is `merge`'s job); allow `mitre_technique` on the one step that requests the ticket (code cannot tell which step that is); leave detection and response as `secondary` and rely on the tag (it blurs the D-027 line between explaining a mechanism and prescribing detection).
+**Why:** Keeps the `secondary` tag to the one job D-027 gave it, and stops a model-made mapping from looking sourced.
+
+**Known limits:**
+- Detection and response for a technique now come from `inference` or from a later official-source path (stages 4 and 5 are not built).
+- Code still cannot check that a step is faithful to its page (D-020).
+- The Pack saved by the first live run (`sessions/T1558.003.researcher.json`, git-ignored) predates these rules and would not pass them. A re-run is needed before it is used for stages.

@@ -221,6 +221,8 @@ def _attack_chain_problems(
                 problems.append(f"without documented exploitation every stage 3 text must start with '{POSSIBLE_SCENARIO.capitalize()}'")
                 break
     allowed = {step.mitre_technique.split(".")[0] for step in pack.attack_steps if step.mitre_technique}
+    if pack.topic_type == TopicType.TECHNIQUE:
+        allowed.add(pack.topic.split(".")[0])  # the topic itself: secondary steps carry no id (D-034)
     for block in content.all_tagged():
         for technique in _TECHNIQUE_IN_TEXT.findall(block.value):
             if technique.split(".")[0] not in allowed:
