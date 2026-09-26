@@ -1,13 +1,17 @@
-"""Manual run of the Researcher agent (Milestone 2 part B).
+"""Manual run of the Researcher agent (Milestone 2 part B, technique path D-033).
 
 Examples (run from the repo root):
     .venv\\Scripts\\python.exe scripts\\run_researcher.py CVE-2021-44228            (dry run)
     .venv\\Scripts\\python.exe scripts\\run_researcher.py CVE-2021-44228 --confirm  (live run)
+    .venv\\Scripts\\python.exe scripts\\run_researcher.py T1558.003 --source-url <page> --confirm
+
+A technique id (no CVE) needs at least one --source-url: an https page on crowdstrike.com or
+picussecurity.com that you choose. The agent reads only those pages, plus ATT&CK.
 
 Without --confirm nothing calls the model: the script only shows the settings and the
 locked-down tool list it would use. With --confirm it runs the agent for real, which counts
 against the Claude subscription's usage limits (no API key is used or allowed).
-The result is saved to sessions/<CVE>.researcher.json (git-ignored) so it can be checked
+The result is saved to sessions/<CVE or technique id>.researcher.json (git-ignored) so it can be checked
 against the official pages, field by field.
 """
 
@@ -21,17 +25,21 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.facts import CveNotFoundError, CveRejectedError  # noqa: E402
+from src.facts import CveNotFoundError, CveRejectedError, TechniqueNotFoundError  # noqa: E402
 from src.researcher import (  # noqa: E402
     AgentRunError,
     ApiKeyPresentError,
     ResearcherFailedError,
+    SourceUrlError,
     TurnLimitError,
+    check_source_urls,
     run_researcher,
+    topic_type_of,
 )
-from src.researcher_tools import ALLOWED_TOOL_NAMES  # noqa: E402
-from src.schemas import FieldStatus  # noqa: E402
+from src.researcher_tools import ALLOWED_TOOL_NAMES, TECHNIQUE_ALLOWED_TOOL_NAMES  # noqa: E402
+from src.schemas import ExploitationStatus, FieldStatus, TopicType  # noqa: E402
 from src.settings import SettingsError, load_settings  # noqa: E402
+from src.sources.attack import normalize_technique_id  # noqa: E402
 from src.sources.http_cache import DEFAULT_CACHE_DIR, FetchError  # noqa: E402
 from src.sources.nvd import normalize_cve_id  # noqa: E402
 
@@ -39,7 +47,10 @@ from src.sources.nvd import normalize_cve_id  # noqa: E402
 def print_pack(run) -> None:
     pack = run.pack
     print(f"\n=== {pack.topic} ===")
-    print(f"Exploitation status (set by code from KEV): {pack.exploitation_status.value}")
+    if pack.exploitation_status == ExploitationStatus.NOT_APPLICABLE:
+        print("Exploitation status: not applicable (a technique has no incident to document)")
+    else:
+        print(f"Exploitation status (set by code from KEV): {pack.exploitation_status.value}")
 
     print("\nTriage card (set by code):")
     for name, item in pack.triage_fields.items():
@@ -83,24 +94,37 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    parser = argparse.ArgumentParser(description="Run the Researcher agent for one CVE.")
-    parser.add_argument("cve_id", help="for example CVE-2021-44228")
+    parser = argparse.ArgumentParser(description="Run the Researcher agent for one CVE or one ATT&CK technique.")
+    parser.add_argument("topic", help="a CVE id (CVE-2021-44228) or an ATT&CK technique id (T1558.003)")
+    parser.add_argument(
+        "--source-url",
+        action="append",
+        default=[],
+        help="technique runs only: a crowdstrike.com or picussecurity.com page to read (repeatable)",
+    )
     parser.add_argument("--confirm", action="store_true", help="really run the agent (uses subscription usage)")
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     args = parser.parse_args(argv)
 
     try:
-        cve_id = normalize_cve_id(args.cve_id)
+        topic_type = topic_type_of(args.topic)
+        if topic_type == TopicType.TECHNIQUE:
+            topic = normalize_technique_id(args.topic)
+        else:
+            topic = normalize_cve_id(args.topic)
+        source_urls = check_source_urls(topic_type, args.source_url)
         settings = load_settings().researcher
-    except (ValueError, SettingsError) as exc:
+    except (ValueError, SettingsError) as exc:  # SourceUrlError is a ValueError
         print(f"Cannot start: {exc}")
         return 1
 
-    print(f"Topic: {cve_id}")
+    print(f"Topic: {topic} ({topic_type.value})")
+    for url in source_urls:
+        print(f"Source page: {url}")
     print(f"Model: {settings.model}   effort: {settings.effort}")
     print(f"Turn cap: {settings.max_turns}   corrections allowed: {settings.max_schema_retries}")
     print("Tools the agent can use (everything else is off):")
-    for name in ALLOWED_TOOL_NAMES:
+    for name in TECHNIQUE_ALLOWED_TOOL_NAMES if topic_type == TopicType.TECHNIQUE else ALLOWED_TOOL_NAMES:
         print(f"  {name}")
 
     if not args.confirm:
@@ -109,11 +133,13 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\nRunning the agent. This counts against your subscription usage...")
     try:
-        run = asyncio.run(run_researcher(cve_id, settings, cache_dir=args.cache_dir))
+        run = asyncio.run(
+            run_researcher(topic, settings, cache_dir=args.cache_dir, source_urls=source_urls)
+        )
     except ApiKeyPresentError as exc:
         print(f"Stopped: {exc}")
         return 1
-    except (CveNotFoundError, CveRejectedError, FetchError) as exc:
+    except (CveNotFoundError, CveRejectedError, TechniqueNotFoundError, SourceUrlError, FetchError) as exc:
         print(f"Could not collect the facts: {exc}")
         return 1
     except (TurnLimitError, AgentRunError) as exc:

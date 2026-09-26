@@ -23,7 +23,7 @@ def technique_pack(with_cwe=False):
     data = {
         "topic": "T1558.003",
         "topic_type": "technique",
-        "exploitation_status": "unknown",
+        "exploitation_status": "not_applicable",
         "weakness_mechanism": [sec("Service tickets are encrypted with the account's password hash")],
         "attack_steps": [
             {"number": 1, "action": sec("The attacker lists service accounts", PAGE), "mitre_technique": "T1558.003"},

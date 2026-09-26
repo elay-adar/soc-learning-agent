@@ -30,6 +30,14 @@ _MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 _HTML_TAG = re.compile(r"</?[a-z]+>")
 
 
+def normalize_technique_id(technique_id: str) -> str:
+    """Upper-case and trim an ATT&CK technique id. Raises ValueError unless it looks like T1558 or T1558.003."""
+    cleaned = technique_id.strip().upper()
+    if not TECHNIQUE_ID_PATTERN.match(cleaned):
+        raise ValueError(f"not a valid ATT&CK technique id: {technique_id!r} (expected T1558 or T1558.003)")
+    return cleaned
+
+
 class AttackFormatError(ValueError):
     """The ATT&CK data does not have the expected structure."""
 

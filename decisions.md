@@ -503,3 +503,27 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 
 **Follow-up (open):** `ExploitationStatus` has three values and the Pack validators allow evidence and incidents only when the status is `documented`. A technique-only Pack has no meaningful status, so it currently carries `unknown` and the rules are skipped by `topic_type`. When the Researcher's technique path is built, decide whether a `not_applicable` value (or an optional field) should replace this. Not changed now.
 **Known limits:** "no CVE or CWE" is decided from `topic_type` and the `weakness_type` triage field. Whether the payload is specific, and whether a step tie-back to stage 2 is real, are prompt-only. No live run has used the new rules.
+
+---
+
+## D-033: Technique-only input path for the Researcher; exploitation status gains `not_applicable`
+
+**Date:** 2026-09-26 | **Status:** Accepted (closes the follow-up in D-032)
+
+**Context:** D-028 and D-029 made a single ATT&CK technique (for example Kerberoasting, T1558.003) a valid topic with no CVE or CWE. The Researcher could only start from a CVE.
+
+**Decision:**
+- `ExploitationStatus` gains `not_applicable`. A `technique` Pack must use it, no other topic type may, and evidence and incidents stay forbidden with it. This replaces the earlier stop-gap of carrying `unknown` for a technique. The stage rules still skip the exploitation checks by `topic_type`.
+- `run_researcher` takes a CVE id or a technique id and decides from the id. Code collects the facts first, as for a CVE: `collect_technique_facts` reads only ATT&CK. The technique name, tactic and description are `documented`. Every NVD-, KEV- and CWE-derived triage field (`exploited_in_the_wild`, `severity_cvss`, `weakness_type`, `affected_products`, `fix_status`, `published`, `nvd_analysis_status`) is `not_applicable`, not left out and not guessed.
+- A technique run loads only `get_attack_technique` and `get_secondary_source`. The NVD and KEV tools are not in its server or its allowed-tool list, and `assert_read_only` checks the set for the run's topic type.
+- The person running it supplies the secondary pages (`--source-url`, repeatable). The model must not invent page addresses. Code refuses a technique run with no page, and any page that is not https on the two allowlist domains, before the model starts. A CVE run given pages is refused too. Pages must still be returned by a tool during the run before a claim may cite them (D-020, D-031).
+- A technique run whose Pack has no attack steps is rejected and sent back for correction, since stage 3 cannot be built without them. After the correction cap it fails.
+
+**Alternatives considered:** keep `unknown` for technique Packs (contradicts the `not_applicable` triage fields and means "source unreachable" elsewhere); let the agent choose its own pages from memory (invented addresses); accept an empty step list as unknown (leaves a Pack that cannot feed stage 3).
+**Why:** Keeps the technique Pack honest about what does not apply, keeps the tool reach of a run to what it needs, and turns two more rules (pages on the allowlist, steps present) into code checks.
+
+**Known limits:**
+- `scripts/run_stages.py` and `scripts/serve_stages.py` still take a CVE id, so stages for a technique Pack are a separate step.
+- No live run has used this path yet.
+- Code cannot check that ATT&CK truly lacks a step breakdown before a secondary page is used (D-029), nor that a step is faithful to its page (D-020's limit).
+- There is still no vendor-advisory tool (D-031).

@@ -120,3 +120,46 @@ def test_zero_retries_means_a_single_attempt():
     with pytest.raises(ResearcherFailedError):
         asyncio.run(validate_with_retries(base_pack(False), ask, 0))
     assert len(calls) == 1
+
+
+# ---- technique-only runs: two tools, no NVD or KEV (D-033) ----
+
+from src.researcher_tools import (
+    TECHNIQUE_ALLOWED_TOOL_NAMES,
+    TECHNIQUE_TOOL_NAMES,
+    build_researcher_tools,
+)
+from src.schemas import TopicType
+
+
+def technique_options():
+    return build_researcher_options(SETTINGS, "system prompt", topic_type=TopicType.TECHNIQUE)
+
+
+def test_technique_run_gets_only_the_attack_and_secondary_tools():
+    assert TECHNIQUE_TOOL_NAMES == ("get_attack_technique", "get_secondary_source")
+    o = technique_options()
+    assert o.allowed_tools == list(TECHNIQUE_ALLOWED_TOOL_NAMES)
+    assert not any("nvd" in name or "kev" in name for name in o.allowed_tools)
+    assert o.tools == [] and o.permission_mode == "dontAsk"
+
+
+def test_technique_server_does_not_contain_the_nvd_or_kev_tools():
+    names = [t.name for t in build_researcher_tools(names=TECHNIQUE_TOOL_NAMES)]
+    assert names == list(TECHNIQUE_TOOL_NAMES)
+
+
+def test_the_cve_check_rejects_the_technique_tool_set_and_the_other_way_round():
+    with pytest.raises(UnsafeOptionsError):
+        assert_read_only(technique_options())  # checked as a CVE run: get_nvd_record is missing
+    with pytest.raises(UnsafeOptionsError):
+        assert_read_only(options(), topic_type=TopicType.TECHNIQUE)  # NVD and KEV would be allowed
+
+
+def test_technique_options_pass_their_own_check_and_reject_loosening():
+    assert_read_only(technique_options(), topic_type=TopicType.TECHNIQUE)
+    loosened = dataclasses.replace(
+        technique_options(), allowed_tools=[*TECHNIQUE_ALLOWED_TOOL_NAMES, ALLOWED_TOOL_NAMES[0]]
+    )
+    with pytest.raises(UnsafeOptionsError):
+        assert_read_only(loosened, topic_type=TopicType.TECHNIQUE)

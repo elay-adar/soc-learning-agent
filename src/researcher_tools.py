@@ -10,6 +10,7 @@ it is untrusted data (text from the web), never instructions.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,9 @@ SERVER_NAME = "researcher"
 TOOL_NAMES = ("get_nvd_record", "get_kev_entry", "get_attack_technique", "get_secondary_source")
 # The names the model sees, in the form the SDK uses for tools from an in-process server.
 ALLOWED_TOOL_NAMES = tuple(f"mcp__{SERVER_NAME}__{name}" for name in TOOL_NAMES)
+# A technique-only run (no CVE) has no use for NVD or KEV, so those tools are not loaded at all (D-033).
+TECHNIQUE_TOOL_NAMES = ("get_attack_technique", "get_secondary_source")
+TECHNIQUE_ALLOWED_TOOL_NAMES = tuple(f"mcp__{SERVER_NAME}__{name}" for name in TECHNIQUE_TOOL_NAMES)
 
 MAX_LIST_ITEMS = 30
 _OPEN, _CLOSE = "<untrusted_source_data", "</untrusted_source_data>"
@@ -205,8 +209,10 @@ def build_researcher_tools(
     kev_downloader: Downloader = download_json,
     attack_downloader: Any = None,
     page_downloader: PageDownloader = download_page,
+    names: Sequence[str] = TOOL_NAMES,
 ) -> list[SdkMcpTool[Any]]:
-    """The four Researcher tools. Downloaders can be replaced, so tests never use the network."""
+    """The Researcher tools named in `names` (all four by default). Downloaders can be replaced,
+    so tests never use the network."""
     read_only = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
     @tool(
@@ -259,9 +265,10 @@ def build_researcher_tools(
     async def get_secondary_source(args: dict[str, Any]) -> dict[str, Any]:
         return _text_result(lookup_secondary(str(args.get("url", "")), downloader=page_downloader))
 
-    return [get_nvd_record, get_kev_entry, get_attack_technique, get_secondary_source]
+    everything = [get_nvd_record, get_kev_entry, get_attack_technique, get_secondary_source]
+    return [t for t in everything if t.name in names]
 
 
 def build_researcher_server(**kwargs: Any):
-    """An in-process tool server holding the four tools, ready for ClaudeAgentOptions."""
+    """An in-process tool server holding the chosen tools (all four by default), ready for ClaudeAgentOptions."""
     return create_sdk_mcp_server(SERVER_NAME, tools=build_researcher_tools(**kwargs))

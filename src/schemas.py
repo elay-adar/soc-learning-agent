@@ -32,6 +32,7 @@ class ExploitationStatus(str, Enum):
     DOCUMENTED = "documented"
     NOT_DOCUMENTED = "not_documented"
     UNKNOWN = "unknown"
+    NOT_APPLICABLE = "not_applicable"  # a technique topic has no incident to document (D-033)
 
 
 class TopicType(str, Enum):
@@ -186,6 +187,16 @@ class KnowledgePack(StrictModel):
                 raise ValueError(
                     "evidence and incidents are only allowed when exploitation is documented"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def check_status_matches_topic_type(self) -> KnowledgePack:
+        is_technique = self.topic_type == TopicType.TECHNIQUE
+        not_applicable = self.exploitation_status == ExploitationStatus.NOT_APPLICABLE
+        if is_technique and not not_applicable:
+            raise ValueError("a technique topic must have exploitation status 'not_applicable'")
+        if not_applicable and not is_technique:
+            raise ValueError("exploitation status 'not_applicable' is only allowed for a technique topic")
         return self
 
     @model_validator(mode="after")

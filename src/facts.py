@@ -20,6 +20,7 @@ from src.schemas import (
     TopicType,
     TriageField,
 )
+from src.sources.attack import AttackTechnique, fetch_attack_index, normalize_technique_id
 from src.sources.http_cache import DEFAULT_CACHE_DIR, Downloader, FetchError, download_json
 from src.sources.kev import KEV_CATALOG_PAGE, KevCatalog, KevEntry, fetch_kev_catalog
 from src.sources.nvd import NvdRecord, fetch_nvd_record, normalize_cve_id
@@ -34,6 +35,10 @@ class CveNotFoundError(LookupError):
 
 class CveRejectedError(ValueError):
     """NVD marks this CVE as rejected, so it is not a real vulnerability."""
+
+
+class TechniqueNotFoundError(LookupError):
+    """ATT&CK has no active technique with this id (it may be revoked, deprecated or mistyped)."""
 
 
 @dataclass
@@ -216,3 +221,69 @@ def collect_facts(
         notes.append("NVD lists no weakness type (CWE) for this CVE yet")
 
     return FactsResult(pack=assemble_pack(record, kev), notes=notes)
+
+
+# Triage fields that come from NVD, KEV or a CWE. A technique has none of them, so each one is
+# recorded as "not applicable" instead of being left out or guessed (D-033).
+TECHNIQUE_NOT_APPLICABLE_FIELDS = (
+    "exploited_in_the_wild",
+    "severity_cvss",
+    "weakness_type",
+    "affected_products",
+    "fix_status",
+    "published",
+    "nvd_analysis_status",
+)
+
+
+def assemble_technique_pack(technique: AttackTechnique, attack_version: str) -> KnowledgePack:
+    """Build the code-owned part of a Knowledge Pack for a technique-only topic (no CVE)."""
+    kind = "sub-technique" if technique.is_subtechnique else "technique"
+    tactics = ", ".join(technique.tactics) or "none listed"
+    triage = {
+        "attack_technique": _field(
+            f"{technique.technique_id} {technique.name} ({kind}); tactic: {tactics}; "
+            f"ATT&CK Enterprise version {attack_version}",
+            technique.url,
+        ),
+        **{
+            name: TriageField(status=FieldStatus.NOT_APPLICABLE)
+            for name in TECHNIQUE_NOT_APPLICABLE_FIELDS
+        },
+    }
+    descriptions = []
+    if technique.description:
+        descriptions.append(_documented(f"ATT&CK description: {technique.description}", technique.url))
+    return KnowledgePack(
+        topic=technique.technique_id,
+        topic_type=TopicType.TECHNIQUE,
+        exploitation_status=ExploitationStatus.NOT_APPLICABLE,
+        triage_fields=triage,
+        weakness_mechanism=descriptions,
+    )
+
+
+def collect_technique_facts(
+    technique_id: str,
+    *,
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+    downloader=None,
+) -> FactsResult:
+    """Read one ATT&CK technique and return a partial Knowledge Pack. NVD and KEV are never used.
+
+    Raises ValueError for a malformed id, TechniqueNotFoundError if ATT&CK has no active technique
+    with that id, and FetchError if the ATT&CK data cannot be read.
+    """
+    technique_id = normalize_technique_id(technique_id)
+    kwargs = {"downloader": downloader} if downloader is not None else {}
+    index, fetched = fetch_attack_index(cache_dir=cache_dir, **kwargs)
+    technique = index.find(technique_id)
+    if technique is None:
+        raise TechniqueNotFoundError(
+            f"{technique_id} is not an active technique in MITRE ATT&CK Enterprise "
+            f"(version {index.version}); it may be revoked, deprecated or mistyped"
+        )
+    notes: list[str] = []
+    if fetched.stale:
+        notes.append(f"ATT&CK data could not be reached; using cached data from {fetched.fetched_at}")
+    return FactsResult(pack=assemble_technique_pack(technique, index.version), notes=notes)

@@ -87,7 +87,7 @@ The Researcher records exploitation status as one of three values, not two. Abse
 
 These rules are enforced in code, not only in prompts. A validation step compares the Lecturer's and Examiner's output with the recorded status and rejects text that describes an attack that was not documented.
 
-This table applies only when the topic is CVE/CWE-based. For a technique-only input with neither (for example Kerberoasting), there is no incident to be documented or undocumented, and stage 1 does not carry an exploitation-status sentence at all (D-029).
+This table applies only when the topic is CVE/CWE-based. For a technique-only input with neither (for example Kerberoasting), there is no incident to be documented or undocumented, and stage 1 does not carry an exploitation-status sentence at all (D-029). Its exploitation status is recorded as `not_applicable` (D-033), and every NVD-, KEV- and CWE-derived triage field is `not_applicable` too.
 
 ## 7. Diagrams
 

@@ -188,3 +188,41 @@ def test_plan_stage_needs_a_key():
     del data["stages"][0]["key"]
     with pytest.raises(ValidationError):
         StagePlan.model_validate(data)
+
+
+# ---- technique topics: exploitation status "not_applicable" (D-033) ----------------------
+
+
+def technique_pack_data(**overrides) -> dict:
+    data = {"topic": "T1558.003", "topic_type": "technique", "exploitation_status": "not_applicable"}
+    data.update(overrides)
+    return data
+
+
+def test_technique_pack_with_not_applicable_status_passes():
+    pack = KnowledgePack.model_validate(technique_pack_data())
+    assert pack.exploitation_status == ExploitationStatus.NOT_APPLICABLE
+
+
+@pytest.mark.parametrize("status", ["documented", "not_documented", "unknown"])
+def test_technique_pack_must_use_not_applicable(status):
+    data = technique_pack_data(exploitation_status=status)
+    if status == "documented":
+        data["exploitation_evidence"] = documented("Listed", KEV)
+    with pytest.raises(ValidationError, match="technique topic must have exploitation status"):
+        KnowledgePack.model_validate(data)
+
+
+@pytest.mark.parametrize("topic_type", ["cve", "misconfiguration"])
+def test_not_applicable_status_is_only_for_technique_topics(topic_type):
+    with pytest.raises(ValidationError, match="only allowed for a technique topic"):
+        KnowledgePack.model_validate(technique_pack_data(topic_type=topic_type))
+
+
+def test_not_applicable_status_cannot_carry_evidence_or_incidents():
+    with pytest.raises(ValidationError, match="only allowed when exploitation is documented"):
+        KnowledgePack.model_validate(technique_pack_data(exploitation_evidence=documented("Listed", KEV)))
+    with pytest.raises(ValidationError, match="only allowed when exploitation is documented"):
+        KnowledgePack.model_validate(
+            technique_pack_data(incidents=[{"name": "x", "impact": documented("Impact")}])
+        )
