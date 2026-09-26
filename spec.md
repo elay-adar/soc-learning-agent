@@ -1,8 +1,8 @@
 # Specification
 
-**Version:** 0.2 (draft)
-**Date:** 2026-09-24
-**Status:** Agreed in principle. Open questions are listed at the end and will be settled during prototyping.
+**Version:** 0.3 (draft)
+**Date:** 2026-09-26
+**Status:** Agreed in principle. Open questions are listed at the end and will be settled during prototyping. Sections 4, 5, 6.2, 6.3, 7 and 8 updated for the single-technique scope and secondary sources (D-027, D-028, D-029).
 
 ## 1. Purpose
 
@@ -31,6 +31,8 @@ Every topic covers both sides. If the user asks about a vulnerability, the agent
 
 Not every weakness has a CVE. Misconfigurations and design features (for example Kerberoasting) are described through CWE entries and MITRE ATT&CK techniques instead, so discovery must search more than one kind of entity.
 
+**Scope (D-028).** The agent teaches one MITRE ATT&CK (sub-)technique, or one CVE/CWE, plus the weakness that enables it - not a multi-technique intrusion story. A technique is one point in the tactic > technique > sub-technique > procedure hierarchy, not a kill chain by itself.
+
 ## 5. Triage card
 
 The Planner selects the fields that are relevant to the topic from this catalog. Each field carries a value with a source, "not applicable", or "unknown".
@@ -46,6 +48,8 @@ The Planner selects the fields that are relevant to the topic from this catalog.
 | Publication date | When it was disclosed | NVD |
 
 MITRE ATT&CK techniques are intentionally not a card field. Many topics share techniques, and the mapping is covered in stage 3.
+
+For a technique-only topic with no CVE or CWE (for example Kerberoasting), every NVD/KEV/EPSS-sourced field is "not applicable", and "Weakness type" states plainly that this technique has none (D-028).
 
 ## 6. Explanation stages
 
@@ -63,9 +67,9 @@ During development, each stage may show a "what is new compared to the previous 
 
 | Stage | Subject | Content | Diagram |
 |---|---|---|---|
-| 1 | Overview | The vulnerability and the attack that followed as one story: who was affected, damage to the organization, rough timeline, what the attacker gained. No technical detail. If no incident is documented: "No documented incident from official sources", with impact described as potential and labeled as such. | Simple story flow: weakness, attack, damage |
-| 2 | Why it is possible | The only in-depth technical explanation of the weakness. The component, protocol or configuration involved and its normal function. Root cause and CWE (which security assumption broke). Failure mechanism step by step. Preconditions: privileges, network access, required configuration. Scope: affected versions and environments. What the fix or hardening changes in the mechanism. | Architecture with the failure point marked; sequence diagram for multi-step mechanisms |
-| 3 | Attack chain | What the attacker does at each step, and which weakness from stage 2 enables it. Refers back to stage 2 instead of re-explaining. Includes the MITRE ATT&CK mapping. | Kill chain as cumulative frames showing spread |
+| 1 | Overview | A definition paragraph (2-4 sentences: category, MITRE tactic, target, core action); what assumption or trust is broken; the payload the attacker ends up holding (D-029); the component/protocol involved and its normal function, root cause and preconditions, all conceptual (naming the component is allowed, its internal mechanism is not); the SOC angle on why it matters. No technical mechanism detail, no CWE id, no CVSS. When the topic is CVE/CWE-based and exploitation status applies (D-006): "No documented incident from official sources" when not documented, impact labeled potential. | One static picture: weakness, attack, payload |
+| 2 | The weakness | The only in-depth technical explanation. Anchored in a CVE or CWE when the Pack has one (documented); otherwise an explicit statement that this technique has none, followed by the protocol or design flaw itself (tagged secondary, D-027/D-029). The component's normal function, root cause, failure mechanism step by step, preconditions, what a fix or hardening changes. Depth stays bounded to what is relevant to an analyst - no source code, no protocol-specification-level detail. | Architecture with the failure point marked; sequence diagram for multi-step mechanisms |
+| 3 | Execution flow | The internal execution steps of this one technique, in order - never a multi-technique kill chain. Each step ties back explicitly to the weakness from stage 2 instead of re-explaining it. Includes the MITRE ATT&CK mapping. A step's detail may be tagged secondary when no official source gives the step breakdown (D-029). | Cumulative frames, one per execution step, Previous/Next |
 | 4 | What an analyst sees | Telemetry sources per attack step. Event IDs and key fields, and what each indicates. Detection logic in plain language plus pseudo-code. Published IOCs (with publication date, since they age). False positives. Detection gaps: what will not appear in logs under default settings. | Detection flow: attack step, log source, event, rule, alert; gaps marked |
 | 5 | Response and prevention | Triage questions and outcomes (false alarm, monitor, escalate). Tier 1 boundary: what to handle, when to escalate, what evidence to attach. Containment options and their side effects. Eradication and recovery. Hardening. Lessons, including detection gaps that can be closed. | Decision tree ending in three outcomes; escalation branch continues to containment and recovery |
 
@@ -83,6 +87,8 @@ The Researcher records exploitation status as one of three values, not two. Abse
 
 These rules are enforced in code, not only in prompts. A validation step compares the Lecturer's and Examiner's output with the recorded status and rejects text that describes an attack that was not documented.
 
+This table applies only when the topic is CVE/CWE-based. For a technique-only input with neither (for example Kerberoasting), there is no incident to be documented or undocumented, and stage 1 does not carry an exploitation-status sentence at all (D-029).
+
 ## 7. Diagrams
 
 - Diagrams are written in Mermaid and rendered on the local page.
@@ -90,15 +96,18 @@ These rules are enforced in code, not only in prompts. A validation step compare
 - A multi-step diagram is built from **frames**. Frame 1 shows the first attack step, each next frame adds the following step and highlights what is new, until the full picture is shown. Frames are generated from the list of steps in the attack chain, not freely. The page provides Previous and Next controls.
 - Each frame's syntax is validated before it is saved. On error the agent fixes it and retries.
 - The Mermaid library is stored locally in the repository (`web/vendor/`, pinned version, hash-checked) so the page works offline. Node.js is not needed: syntax is checked by a strict Python subset check, and the library in the browser is the second check (D-022, D-023).
-- Frames are built by code from the attack steps in the Knowledge Pack. The model supplies only a short label and a tagged description per step (D-023).
+- Frames are built by code from the attack steps in the Knowledge Pack. The model supplies only a short label and a tagged description per step (D-023). When no official source gives a step breakdown for a technique, the Researcher may build the attack-steps list from a secondary source, and each such step is tagged secondary (D-029).
 
 ## 8. Sources and provenance
 
-**Allowed sources:** NVD, CISA KEV, MITRE ATT&CK, MITRE CWE, vendor advisories, FIRST EPSS, and official incident disclosures (CISA advisories, SEC 8-K filings, statements from the affected organization, regulator announcements). Blogs, community rule sets, and exploit databases are not used by default.
+**Allowed sources:** NVD, CISA KEV, MITRE ATT&CK, MITRE CWE, vendor advisories, FIRST EPSS, and official incident disclosures (CISA advisories, SEC 8-K filings, statements from the affected organization, regulator announcements). Blogs, community rule sets, and exploit databases are not used by default as official sources.
 
-**Provenance tags** on every item in stages 4 and 5:
+**Secondary sources (D-027).** A fixed allowlist of well-known, reputable security sites (for example Abnormal AI, Picus Security, CrowdStrike) may be used for one purpose only: explaining a mechanism or execution flow that no official source documents in enough detail (typically a technique with no CVE/CWE, stages 2 and 3). A secondary source is never presented as official and is never used where an official source is available.
+
+**Provenance tags** on every item:
 
 - `[Documented]`: taken from an official source, with a link.
+- `[Secondary]`: taken from a secondary allowlist source, with a link. Kept distinct from Documented (D-027).
 - `[Inference]`: derived by the agent, not officially documented (for example most false-positive guidance, detection logic, containment steps without an official recommendation).
 - `[Unknown]`: no information available.
 
@@ -163,7 +172,7 @@ input (CVE ID or topic)
 ## 13. Success criteria
 
 1. Free-text input leads to discovery, a choice, and cumulative stage explanations.
-2. Every factual claim is supported by an official source, or is tagged `[Inference]` or `[Unknown]`.
+2. Every factual claim is supported by an official source, or is tagged `[Secondary]` (allowlist source), `[Inference]` or `[Unknown]`.
 3. All diagrams render without errors.
 4. The triage card matches the official sources.
 5. The same code handles a CVE topic and a non-CVE topic with a different number of stages, fields and diagrams.
