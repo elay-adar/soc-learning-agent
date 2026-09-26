@@ -374,7 +374,7 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 
 ## D-027: Secondary sources allowed, tagged separately (amends D-005)
 
-**Date:** 2026-09-26 | **Status:** Accepted
+**Date:** 2026-09-26 | **Status:** Accepted; scope extended by D-029
 
 **Context:** D-005 allowed official sources only. The clearest, deepest explanations of a technique's mechanism (for example the Kerberos design flaw behind Kerberoasting) often live in well-known professional security sites, not in an official source with a fetchable API. Official-only leaves stage 2 (the weakness) thin for techniques that have no CVE/CWE.
 **Decision:**
@@ -391,7 +391,7 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 
 ## D-028: Scope is one technique plus its enabling weakness; stage model revised
 
-**Date:** 2026-09-26 | **Status:** Accepted (design; code change pending in Claude Code)
+**Date:** 2026-09-26 | **Status:** Accepted (design); stage 1-3 content finalized by D-029
 
 **Context:** While designing stages 1-3 for the Kerberoasting prototype, we clarified that a MITRE ATT&CK (sub-)technique such as Kerberoasting (T1558.003) is a single point in the taxonomy (tactic > technique > sub-technique > procedure), not a multi-technique kill chain. The spec's stage 3 wording ("kill chain / spread") wrongly implied a chain of several techniques.
 **Decision:**
@@ -404,3 +404,41 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 **Alternatives considered:** Option B (technique inside a broader kill chain) - richer but fuzzy and scope-expanding, rejected for now. Dropping stage 3 - rejected: the frames mechanism is sound, only its framing was wrong.
 **Why:** Matches the real MITRE taxonomy and the input model, keeps scope achievable, and salvages the existing stage-3 work.
 **Consequences:** spec.md sections 3, 6.2 and 7 need updating (stage 3 wording, stage 1/2 content, "kill chain" language) when the design moves to spec. Stage 3 code keeps its frame builder; its labels and prompt wording change. The words "kill chain" leave the learner-facing text.
+
+
+---
+
+## D-029: Full content spec for stages 1-3 (finalizes D-028), and secondary sources extended to the Researcher
+
+**Date:** 2026-09-26 | **Status:** Accepted (design; code change pending in Claude Code)
+
+**Context:** D-028 set the single-technique scope and the shape of stages 1-3. This session worked through each stage's exact content, and in doing so found that D-027's secondary-source allowlist is needed earlier than planned: not only in the Lecturer's stage 2 text, but in the Researcher's own fact-gathering, because the Knowledge Pack's `attack_steps` field (which stage 3 is built from, D-023) is synthesized by the Researcher, not returned by any tool. Checking real Kerberoasting explainer sites (Abnormal AI, Picus Security, CrowdStrike) during this session showed their step breakdowns (enumerate SPNs, request a TGS ticket, extract it, crack it offline, use the cracked credential) are not present in the ATT&CK STIX description field `get_attack_technique` returns - they exist only in secondary sources.
+
+**Decision:**
+
+**Stage 1 (Overview), full content:**
+1. Definition paragraph, one paragraph of 2-4 sentences (about 40-80 words). Must state: the technique's category and MITRE tactic (for example "a Credential Access technique"); the component/protocol/resource type it targets; the core action in one clause. No CWE ids, CVSS, version numbers, or the ATT&CK id written into the prose (the id is a separate structured field).
+2. What assumption, trust or check is broken, conceptual.
+3. **Payload** (new field): an explicit list of what the attacker ends up holding - for example an offline-crackable encrypted secret, internal user credentials, sensitive server data - specific to this technique, not a generic phrase.
+4. The component/protocol/configuration involved and its normal function, the root cause (which assumption broke), and preconditions (privileges, network access) - all conceptual. Naming the protocol/component is allowed (needed for 1 and 3 above); internal mechanism detail, version numbers, and configuration option names are not (they belong to stage 2).
+5. The SOC angle: why this matters to an analyst. Not "what an analyst might see" (that is stage 4, dropped from stage 1's scope).
+6. The exploitation-status tag and its wording rules (documented / not documented / unknown, D-006) do not apply to an attack-first, technique-only topic like Kerberoasting: there is no incident to be documented or undocumented. This only applies when the input is a technique/CWE with no CVE; a CVE-based run keeps D-006 as before.
+**Tool:** `get_attack_technique` only. **Diagram:** one static picture, unchanged.
+
+**Stage 2 (The weakness), full content:**
+1. Anchor: a CVE or CWE, when the Pack has one - cited as `documented`, including the weakness type in plain words. When neither exists (Kerberoasting has neither), the stage says so explicitly ("this technique has no CVE or CWE") and explains the protocol or design flaw itself instead, tagged `secondary`.
+2. The component's normal function.
+3. Root cause: which security assumption broke.
+4. The failure mechanism, step by step.
+5. Preconditions.
+6. What a fix or hardening changes.
+7. An explicit depth boundary: a view of the flawed architecture, but not deeper than stays relevant to an analyst - no source code, no protocol-RFC-level detail.
+**Tools:** `get_nvd_record` when the input is a CVE; the official CWE site when a CWE id is known; otherwise a secondary source from the allowlist. **Finding:** no official source maps an arbitrary ATT&CK technique to a CWE or CVE; this is not a missing tool, it is a real gap, correctly handled by `not_applicable` (D-028) plus a secondary source.
+
+**Stage 3 (Execution flow), full content:** the internal execution steps of this one technique, in order (not a multi-technique kill chain). Each step names what the attacker does and ties back explicitly to the weakness from stage 2 ("as explained in stage 2, this exploits ..."). No commands, payloads or exploit code (unchanged, defensive focus). Diagram mechanism is unchanged from D-008/D-023: frames built in code from the chain, Previous/Next, one explanation revealed per frame. Only the learner-facing framing changes: "execution flow of this technique", never "kill chain" or "attack chain of techniques".
+
+**Secondary sources extended to the Researcher (amends D-027's scope):** the Researcher, not only the Lecturer, may use the secondary-source allowlist, specifically to build the Knowledge Pack's `attack_steps` field when no official source gives a step breakdown for a technique. Every fact from a secondary source is tagged `secondary` in the Pack, same as when the Lecturer uses one directly.
+
+**Alternatives considered:** Keep `attack_steps` as the Researcher's own knowledge (`inference`) with no source access - rejected, since D-023 already ties stage 3's correctness to the Pack's `attack_steps` being accurate, and ungrounded inference is weaker than a tagged secondary source; restrict secondary sources to the Lecturer only - rejected, it leaves the Researcher's own Pack fields for a non-CVE technique without any grounding better than model memory, which is what D-027 was meant to fix.
+**Why:** The real explainer sites checked this session show the step-by-step breakdown a learner needs simply does not exist in an official, structured form for a technique like Kerberoasting. Grounding it in a tagged secondary source is more honest than silent model memory, and matches D-027's original reasoning.
+**Consequences:** `config/stages.toml` stage 2 and 3 `content` fields need rewriting to match this spec. `StageContent`'s provenance enum needs a fourth value `secondary` (D-027, now also touching the Pack schema, not only stage content). `src/researcher_tools.py` needs a secondary-source tool (or tools) reading from the fixed allowlist; `src/researcher.py`'s allowed-domain check (D-020) needs the secondary allowlist added, kept distinct from the official-domain list. `src/lecturer.py`'s `_stage_rules` needs a new block for `why_possible` (stage 2, currently empty) and a rewrite of the `overview` (stage 1) block for the payload field and the dropped exploitation-status wording for attack-first topics. `src/stage_rules.py` needs a check for the new `secondary` tag and for the "no CVE or CWE" statement. Stage 3's existing frame-building code (`src/frames.py`) needs no change; only its prompt wording changes.
