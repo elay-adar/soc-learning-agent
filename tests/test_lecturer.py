@@ -76,7 +76,7 @@ def prompts(pack=None, number=1, previous=None):
 
 def test_prompts_carry_the_stage_definition_and_plan_item():
     system, first = prompts()
-    assert "No technical detail" in system  # the stage 1 definition content
+    assert "definition paragraph" in system  # the stage 1 definition content (D-029)
     assert "The story" in first and "story_flow" in first
 
 
@@ -424,7 +424,7 @@ def test_a_glossary_term_defined_in_an_earlier_stage_is_sent_back_with_the_term_
     pack = chain_pack()
     earlier = StageContent.model_validate_json(with_glossary(stage_json(), ("JNDI", "A Java naming feature.")))
     bad = with_glossary(chain_json(pack), ("jndi", "A Java naming feature."))
-    good = with_glossary(chain_json(pack), ("Kill chain", "The ordered steps of an attack."))
+    good = with_glossary(chain_json(pack), ("Attack step", "The ordered steps of an attack."))
     client = FakeClient([reply(bad), reply(good)])
     outcome = asyncio.run(
         run_lecturer(pack, ATTACK_PLAN, 3, SETTINGS, CONFIG, previous=STAGE2, earlier=[earlier, STAGE2],
@@ -432,7 +432,7 @@ def test_a_glossary_term_defined_in_an_earlier_stage_is_sent_back_with_the_term_
     )
     assert outcome.metrics.attempts == 2
     assert "'jndi' was already defined in stage 1" in client.prompts[1]
-    assert [g.term for g in outcome.content.glossary] == ["Kill chain"]
+    assert [g.term for g in outcome.content.glossary] == ["Attack step"]
 
 
 def test_without_an_earlier_list_the_previous_stage_still_counts():
@@ -453,3 +453,63 @@ def test_a_stage_with_a_two_sentence_definition_is_sent_back():
     bad = with_glossary(stage_json(), ("Log4j2", "A Java library. It writes logs."))
     with pytest.raises(OutputError, match="ONE sentence"):
         parse_stage(bad, make_pack(), PLAN.stages[0])
+
+
+# ---- D-029: secondary tag, technique topics, stage 1-3 wording -------------------------------
+
+
+def technique_prompts(number):
+    from tests.test_stage_rules_secondary import technique_pack
+
+    item = ATTACK_PLAN.stages[number - 1]
+    return build_lecturer_prompts(technique_pack(), ATTACK_PLAN, item, CONFIG.stage_by_key(item.key), None)
+
+
+def test_prompt_explains_the_secondary_tag_and_forbids_relabelling():
+    system, _ = prompts()
+    assert 'Tag "secondary"' in system and "never tag such a block" in system
+    assert "crowdstrike.com" in system and "picussecurity.com" in system
+
+
+def test_stage_1_prompt_asks_for_definition_payload_and_soc_angle():
+    system, _ = prompts()
+    for phrase in ("definition paragraph", "payload", "SOC angle", "MITRE tactic", "assumption or trust"):
+        assert phrase in system
+
+
+def test_stage_1_incident_story_is_asked_for_cve_topics_only():
+    assert "Name the product" in prompts()[0]
+    assert "Name the product" not in technique_prompts(1)[0]
+
+
+def test_technique_prompt_has_no_exploitation_sentence_rules():
+    system, _ = technique_prompts(1)
+    assert "not a CVE" in system and "no incident to document" in system
+    assert "must contain the exact sentence" not in system and "'potential'" not in system
+
+
+def test_stage_2_prompt_for_a_technique_without_cve_or_cwe_asks_for_the_statement():
+    from src.stage_rules import NO_CVE_CWE_PHRASE
+
+    system, _ = technique_prompts(2)
+    assert f"exact words '{NO_CVE_CWE_PHRASE}'" in system and "'secondary'" in system
+    assert "seven" not in system and "depth an analyst needs" in system
+
+
+def test_stage_2_prompt_for_a_cve_topic_forbids_the_no_cve_statement():
+    system, _ = prompts(number=2, previous=STAGE1)
+    assert "Never write 'no CVE or CWE'" in system
+
+
+def test_stage_3_prompt_is_about_one_technique_and_bans_kill_chain_wording():
+    system, _ = technique_prompts(3)
+    assert "execution flow of this one technique" in system and "do not use the words 'kill chain'" in system
+    assert "tag its detail 'secondary'" in system
+    assert "Possible scenario" not in system  # technique topics skip the exploitation scenario rule
+
+
+def test_stage_3_prompt_keeps_the_possible_scenario_rule_for_undocumented_cves():
+    from tests.test_frames import chain_pack
+
+    system, _ = stage3_prompts(chain_pack("not_documented"))
+    assert "Possible scenario" in system

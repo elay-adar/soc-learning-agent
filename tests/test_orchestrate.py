@@ -153,7 +153,7 @@ def test_stages_are_written_with_every_earlier_glossary_in_view():
     pack = chain_pack()
     s1 = with_glossary(stage_json(), ("Log4j2", "A Java logging library."))
     s2 = with_glossary(STAGE2, ("JNDI", "A Java naming feature."))
-    s3 = with_glossary(chain_json(pack), ("Kill chain", "The ordered steps of an attack."))
+    s3 = with_glossary(chain_json(pack), ("Attack step", "The ordered steps of an attack."))
     outcome, client = run(
         [reply(plan_json("overview", "why_possible", "attack_chain", "response_prevention", covers=(1, 2, 3))),
          reply(s1), reply(s2), reply(s3)],
@@ -161,7 +161,7 @@ def test_stages_are_written_with_every_earlier_glossary_in_view():
     )
     assert "Log4j2" in client.prompts[2] and "Terms already defined" in client.prompts[2]
     assert "Log4j2; JNDI" in client.prompts[3]
-    assert [g.term for g in outcome.file.stages[2].glossary] == ["Kill chain"]
+    assert [g.term for g in outcome.file.stages[2].glossary] == ["Attack step"]
     json.loads(outcome.file.model_dump_json())
 
 

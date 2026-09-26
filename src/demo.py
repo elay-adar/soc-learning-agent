@@ -95,7 +95,7 @@ def demo_stages_file() -> StagesFile:
         {
             "stage_number": 3, "key": "attack_chain", "title": "Attack chain",
             "blocks": [_inf("Possible scenario: as explained in stage 2, the crafted input is the way in.")],
-            "glossary": [{"term": "Kill chain", "definition": _inf("The ordered steps an attacker takes toward a goal.")}],
+            "glossary": [{"term": "Attack step", "definition": _inf("One action the attacker takes toward a goal.")}],
             "chain": [c.model_dump(mode="json") for c in chain],
             "frames": [f.model_dump(mode="json") for f in build_frames(pack, chain)],
         }

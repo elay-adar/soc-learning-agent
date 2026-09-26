@@ -11,7 +11,7 @@ key = "overview"
 subject = "Overview"
 allowed_depths = ["overview"]
 allowed_diagrams = ["story_flow"]
-content = "The vulnerability and the attack that followed as one story: who was affected, damage to the organization, rough timeline, what the attacker gained. No technical detail."
+content = "A definition paragraph of 2 to 4 sentences (the technique or weakness category and MITRE tactic, what it targets, the core action in one clause); what assumption or trust is broken; the payload the attacker ends up holding, specific to this topic; the component or protocol involved and its normal function, the root cause and the preconditions, all conceptual; and the SOC angle on why it matters to an analyst. For a CVE with documented exploitation, also the incident story: who was affected, the damage and the rough timeline. No technical mechanism detail, and no CWE id, CVSS score or ATT&CK id in the prose."
 
 [[stage]]
 number = 2
@@ -19,15 +19,15 @@ key = "why_possible"
 subject = "Why it is possible"
 allowed_depths = ["conceptual", "technical"]
 allowed_diagrams = ["architecture", "sequence"]
-content = "The only in-depth technical explanation of the weakness: the component and its normal function, root cause and CWE, the failure mechanism step by step, preconditions, scope, and what the fix changes."
+content = "The only in-depth technical explanation of the weakness. Anchor it in the CVE or CWE when there is one. When there is neither, say so explicitly (no CVE or CWE) and explain the protocol or design flaw itself. Cover the component and its normal function, the root cause (which security assumption broke), the failure mechanism step by step, the preconditions, and what a fix or hardening changes. Show the flawed architecture, but go no deeper than an analyst needs: no source code and no protocol-specification detail."
 
 [[stage]]
 number = 3
 key = "attack_chain"
-subject = "Attack chain"
+subject = "Execution flow"
 allowed_depths = ["technical"]
 allowed_diagrams = ["kill_chain_frames"]
-content = "What the attacker does at each step and which weakness from stage 2 enables it. Refers back to stage 2. Includes the MITRE ATT&CK mapping."
+content = "The internal execution steps of this one technique, in order (never a chain of several techniques). Each step says what the attacker does and refers back to stage 2 for the weakness it exploits, without re-explaining it. Includes the MITRE ATT&CK mapping."
 
 [[stage]]
 number = 4

@@ -204,7 +204,7 @@ def stage3_with_glossary(pack, *glossary, **kwargs):
 def test_stage_3_glossary_is_checked_against_earlier_stages():
     pack = chain_pack()
     earlier = [overview(entry("Log4j2")), why(entry("JNDI"))]
-    check_stage(stage3_with_glossary(pack, entry("kill chain")), pack, CHAIN_ITEM, earlier)
+    check_stage(stage3_with_glossary(pack, entry("attack step")), pack, CHAIN_ITEM, earlier)
     with pytest.raises(StageRuleError, match="already defined in stage 2"):
         check_stage(stage3_with_glossary(pack, entry("JNDI")), pack, CHAIN_ITEM, earlier)
 
@@ -214,7 +214,7 @@ def test_the_possible_scenario_wording_does_not_apply_to_definitions(status):
     pack = chain_pack(status)
     content = stage3(pack, blocks=[inf("Possible scenario: an attacker could send input.")],
                      chain=chain_of(pack, detail=lambda n: inf("Possible scenario: an attacker could act.")))
-    content = content.model_copy(update={"glossary": [GlossaryEntry.model_validate(entry("Kill chain"))]})
+    content = content.model_copy(update={"glossary": [GlossaryEntry.model_validate(entry("Attack step"))]})
     check_stage(content, pack, CHAIN_ITEM)
 
 

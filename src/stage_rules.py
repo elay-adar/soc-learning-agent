@@ -20,11 +20,14 @@ from src.merge import normalize_url
 from src.schemas import (
     DiagramType,
     ExploitationStatus,
+    FieldStatus,
     KnowledgePack,
     ProvenanceTag,
     SourcedValue,
     StagePlanItem,
+    TopicType,
 )
+from src.sources.secondary import is_secondary_url
 from src.stage_content import StageContent
 
 NO_INCIDENT_PHRASE = "No documented incident from official sources"
@@ -32,6 +35,7 @@ OVERVIEW_KEY = "overview"
 WHY_POSSIBLE_KEY = "why_possible"
 ATTACK_CHAIN_KEY = "attack_chain"
 POSSIBLE_SCENARIO = "possible scenario"  # spec section 6.3: stage 3 without documented exploitation
+NO_CVE_CWE_PHRASE = "no CVE or CWE"  # D-029: stage 2 says this when the topic has neither
 
 # Wording that presents an attack as having really happened.
 _REAL_ATTACK = re.compile(
@@ -44,6 +48,11 @@ _REAL_ATTACK = re.compile(
 # The learner has never seen the Knowledge Pack, so its name must not appear in their text.
 _INTERNAL_NAME = re.compile(r"\b(?:knowledge\s+)?pack\b", re.IGNORECASE)
 _TECHNIQUE_IN_TEXT = re.compile(r"\bT\d{4}(?:\.\d{3})?\b")
+# D-028: the learner-facing text never says "kill chain" (a technique is one step, not a chain).
+_KILL_CHAIN = re.compile(r"\bkill[\s-]*chain", re.IGNORECASE)
+# D-029: stage 1 is conceptual, so none of these belong in its prose.
+_STAGE1_FORBIDDEN = re.compile(r"\bCWE-\d+|\bCVSS\b|\bT\d{4}(?:\.\d{3})?\b", re.IGNORECASE)
+_CVE_OR_CWE_ID = re.compile(r"\b(?:CVE-\d{4}-\d+|CWE-\d+)\b", re.IGNORECASE)
 
 
 class StageRuleError(ValueError):
@@ -84,10 +93,7 @@ def check_stage(
         problems.append(f"stage_number is {content.stage_number}, expected {item.number}")
     if content.key != item.key:
         problems.append(f"key is '{content.key}', expected '{item.key}'")
-    known = pack_urls(pack)
-    for block in content.all_tagged():
-        if block.tag == ProvenanceTag.DOCUMENTED and normalize_url(block.source_url) not in known:
-            problems.append(f"a documented block cites {block.source_url}, which is not in the Knowledge Pack")
+    problems += _source_problems(content, pack)
 
     if item.diagram == DiagramType.KILL_CHAIN_FRAMES:
         problems += _frames_problems(content, pack)
@@ -105,14 +111,66 @@ def check_stage(
         [g.term for g in content.glossary],
         [(stage.stage_number, [g.term for g in stage.glossary]) for stage in earlier],
     )
-    problems += _exploitation_problems(content, pack)
+    if _KILL_CHAIN.search(" ".join(words)):
+        problems.append("the text says 'kill chain'; a technique is one execution flow, so say 'execution flow'")
+    # D-029: a technique-only topic has no incident to be documented or undocumented, so the
+    # exploitation rules do not apply to it (an enum value for this is a follow-up, D-032).
+    exploitation_applies = pack.topic_type != TopicType.TECHNIQUE
+    if exploitation_applies:
+        problems += _exploitation_problems(content, pack)
+    if content.key == OVERVIEW_KEY:
+        problems += _overview_problems(content)
     if content.key == WHY_POSSIBLE_KEY:
         problems += _why_possible_problems(content, pack)
     if content.key == ATTACK_CHAIN_KEY:
-        problems += _attack_chain_problems(content, pack)
+        problems += _attack_chain_problems(content, pack, exploitation_applies)
 
     if problems:
         raise StageRuleError("; ".join(problems))
+
+
+def has_cve_or_cwe(pack: KnowledgePack) -> bool:
+    """True for a CVE topic, or when the Pack holds a weakness (CWE) value from its sources."""
+    if pack.topic_type == TopicType.CVE:
+        return True
+    weakness = pack.triage_fields.get("weakness_type")
+    return weakness is not None and weakness.status == FieldStatus.VALUE
+
+
+def _source_problems(content: StageContent, pack: KnowledgePack) -> list[str]:
+    """Each block's tag must match its source: documented blocks cite official pages, secondary
+    blocks cite allowlist pages, and both cite a URL the Pack holds. The tag the Pack itself gave
+    that URL must agree, so a secondary source cannot be relabelled as official (D-027)."""
+    known = pack_urls(pack)
+    tags_by_url: dict[str, set[ProvenanceTag]] = {}
+    for _, entry in pack_entries(pack):
+        if entry.source_url:
+            tags_by_url.setdefault(normalize_url(entry.source_url), set()).add(entry.tag)
+    problems: list[str] = []
+    for block in content.all_tagged():
+        if block.tag not in (ProvenanceTag.DOCUMENTED, ProvenanceTag.SECONDARY):
+            continue
+        url = block.source_url
+        if normalize_url(url) not in known:
+            problems.append(f"a {block.tag.value} block cites {url}, which is not in the Knowledge Pack")
+        elif block.tag == ProvenanceTag.DOCUMENTED and is_secondary_url(url):
+            problems.append(f"a documented block cites {url}, which is a secondary source; tag it 'secondary'")
+        elif block.tag == ProvenanceTag.SECONDARY and not is_secondary_url(url):
+            problems.append(f"a secondary block cites {url}, which is not a secondary-source page")
+        elif block.tag == ProvenanceTag.SECONDARY and ProvenanceTag.DOCUMENTED in tags_by_url[normalize_url(url)]:
+            problems.append(f"a secondary block cites {url}, which the Knowledge Pack records as documented")
+    return problems
+
+
+def _overview_problems(content: StageContent) -> list[str]:
+    for text in (content.title, *(b.value for b in content.all_tagged())):
+        found = _STAGE1_FORBIDDEN.search(text)
+        if found:
+            return [
+                "the stage 1 text must not contain a CWE id, a CVSS mention or an ATT&CK technique id "
+                f"(found '{found.group(0)}'): those belong to later stages"
+            ]
+    return []
 
 
 def _diagram_problems(content: StageContent, item: StagePlanItem) -> list[str]:
@@ -147,10 +205,12 @@ def _frames_problems(content: StageContent, pack: KnowledgePack) -> list[str]:
     return []
 
 
-def _attack_chain_problems(content: StageContent, pack: KnowledgePack) -> list[str]:
+def _attack_chain_problems(
+    content: StageContent, pack: KnowledgePack, exploitation_applies: bool = True
+) -> list[str]:
     problems = []
     items = content.all_blocks()
-    if pack.exploitation_status != ExploitationStatus.DOCUMENTED:
+    if exploitation_applies and pack.exploitation_status != ExploitationStatus.DOCUMENTED:
         # Spec section 6.3: without documented exploitation stage 3 is a possible scenario.
         for block in items:
             if block.tag != ProvenanceTag.INFERENCE:
@@ -206,8 +266,23 @@ def _exploitation_problems(content: StageContent, pack: KnowledgePack) -> list[s
 
 
 def _why_possible_problems(content: StageContent, pack: KnowledgePack) -> list[str]:
+    problems: list[str] = []
     documented_weakness = any(w.tag == ProvenanceTag.DOCUMENTED for w in pack.weakness_mechanism)
     has_documented_block = any(b.tag == ProvenanceTag.DOCUMENTED for b in content.blocks)
     if documented_weakness and not has_documented_block:
-        return ["the Pack documents the weakness, so stage 2 needs at least one documented block"]
-    return []
+        problems.append("the Pack documents the weakness, so stage 2 needs at least one documented block")
+
+    joined = " ".join(b.value for b in content.all_tagged())
+    says_none = NO_CVE_CWE_PHRASE.lower() in joined.lower()
+    if has_cve_or_cwe(pack):
+        if says_none:
+            problems.append(f"the topic has a CVE or CWE, so stage 2 must not say '{NO_CVE_CWE_PHRASE}'")
+        return problems
+    if not says_none:
+        problems.append(f"the topic has {NO_CVE_CWE_PHRASE}: stage 2 must say so explicitly, then explain the flaw itself")
+    for found in _CVE_OR_CWE_ID.findall(joined):
+        problems.append(f"stage 2 names {found}, but the topic has {NO_CVE_CWE_PHRASE}")
+    secondary_weakness = any(w.tag == ProvenanceTag.SECONDARY for w in pack.weakness_mechanism)
+    if secondary_weakness and not any(b.tag == ProvenanceTag.SECONDARY for b in content.blocks):
+        problems.append("the flaw comes from a secondary source, so stage 2 needs at least one secondary block")
+    return problems

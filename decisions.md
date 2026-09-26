@@ -480,3 +480,26 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 
 **Not yet done (still open from D-029's consequences):** `stage_rules.py` does not yet check `secondary` blocks or the "no CVE or CWE" statement, and `config/stages.toml` and the Lecturer prompt are unchanged. `run_researcher` is still CVE-only, so no live run has used the new tool yet.
 **Why:** Keeps the Researcher's reach small and enforced in code, and records honestly where official coverage is still missing.
+
+---
+
+## D-032: Stage rules, stage config and Lecturer prompt follow D-029; exploitation enum is a follow-up
+
+**Date:** 2026-09-26 | **Status:** Accepted
+
+**Context:** D-029 listed the code changes its stage 1-3 content needed. This is the Lecturer side of them (the Researcher's technique path is not built yet).
+
+**Decision:**
+- `src/stage_rules.py`:
+  - A `documented` block must cite an official Pack URL. A `secondary` block must cite an allowlist URL whose Pack entries are not tagged documented. So neither tag can stand in for the other.
+  - Stage 2 must say "no CVE or CWE" when the topic has neither, must name no CVE or CWE id then, and needs a `secondary` block when the Pack holds the flaw under a secondary source. When the topic has a CVE or CWE it must not say it.
+  - Stage 1 prose may not contain a CWE id, a CVSS mention or an ATT&CK technique id.
+  - The words "kill chain" are rejected in every stage.
+- Exploitation rules (the "No documented incident" sentence, "potential", "partial", the real-attack wording check, and stage 3's "Possible scenario" rule) are skipped when `topic_type` is `technique`. A CVE topic is unchanged.
+- `config/stages.toml`: stages 1 to 3 rewritten to the D-029 content. Stage 3's subject is now "Execution flow". The internal key `attack_chain` and the `kill_chain_frames` enum value stay, so saved sessions and `src/frames.py` do not break; only learner-facing text changed.
+- The Lecturer prompt has a `secondary` tag rule, the D-029 stage 1 order, a stage 2 block with a with-CVE/CWE and a without variant, and the single-technique framing for stage 3.
+- The payload is a prompt requirement only, not a schema field (code cannot check that it is specific).
+- Test data and the demo stage used "Kill chain" as a glossary term. They now use "Attack step".
+
+**Follow-up (open):** `ExploitationStatus` has three values and the Pack validators allow evidence and incidents only when the status is `documented`. A technique-only Pack has no meaningful status, so it currently carries `unknown` and the rules are skipped by `topic_type`. When the Researcher's technique path is built, decide whether a `not_applicable` value (or an optional field) should replace this. Not changed now.
+**Known limits:** "no CVE or CWE" is decided from `topic_type` and the `weakness_type` triage field. Whether the payload is specific, and whether a step tie-back to stage 2 is real, are prompt-only. No live run has used the new rules.
