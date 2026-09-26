@@ -549,3 +549,18 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 - Detection and response for a technique now come from `inference` or from a later official-source path (stages 4 and 5 are not built).
 - Code still cannot check that a step is faithful to its page (D-020).
 - The Pack saved by the first live run (`sessions/T1558.003.researcher.json`, git-ignored) predates these rules and would not pass them. A re-run is needed before it is used for stages.
+
+---
+
+## D-035: Stage scripts accept a technique id; the trace check samples secondary claims
+
+**Date:** 2026-09-26 | **Status:** Accepted
+
+**Context:** D-033 left `run_stages.py` and `serve_stages.py` taking a CVE id only, so stages could not be built for a technique Pack. The manual "five random claims trace to the Pack" check sampled `documented` blocks only, and a technique's stage text is mostly `secondary`, so the check would have shown almost nothing.
+
+**Decision:**
+- `src/topic.py` has `normalize_topic`: one place that accepts a CVE id or an ATT&CK technique id and rejects anything else. Both scripts use it, so files are named `sessions/T1558.003.researcher.json`, `.stages.json` and so on.
+- `src/trace.py` samples `documented` and `secondary` blocks (each `Claim` carries its tag), and the script prints the tag next to each claim. Inference and unknown blocks are still not sampled.
+- The Planner, the Lecturer and the stage rules needed no change: they already read the topic type from the Pack (D-032).
+
+**Known limits:** the first live run of stages 1 to 3 on a technique Pack has not been done, so the Lecturer prompt and rules of D-032 are still untested against a real model on this path.

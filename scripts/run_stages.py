@@ -4,8 +4,9 @@ Examples (run from the repo root):
     .venv\\Scripts\\python.exe scripts\\run_stages.py CVE-2021-44228                   (dry run)
     .venv\\Scripts\\python.exe scripts\\run_stages.py CVE-2021-44228 --confirm         (live run)
     .venv\\Scripts\\python.exe scripts\\run_stages.py CVE-2021-44228 --stage 3 --confirm
+    .venv\\Scripts\\python.exe scripts\\run_stages.py T1558.003                    (a technique, no CVE)
 
-It reads the Knowledge Pack saved by scripts/run_researcher.py (sessions/<CVE>.researcher.json),
+It reads the Knowledge Pack saved by scripts/run_researcher.py (sessions/<CVE or technique id>.researcher.json),
 so run the Researcher first. Without --confirm nothing calls the model. With --confirm it makes
 one Planner call and one Lecturer call per stage (plus corrections), which counts against the
 Claude subscription's usage limits (no API key is used or allowed).
@@ -14,10 +15,10 @@ With --stage N (and --confirm) only stage N is written again from the saved stag
 call and no Planner call. Only the last saved stage can be replaced, or the next one added.
 
 Saved (git-ignored):
-    sessions/<CVE>.stages.json      the plan and the stages
-    sessions/<CVE>.stage<N>.mmd     each diagram, ready to paste into https://mermaid.live
-    sessions/<CVE>.stage<N>.frame<K>.mmd   the same for each frame of the attack chain (stage 3)
-The script also prints five random documented claims next to the Pack entries they cite, for the
+    sessions/<id>.stages.json      the plan and the stages
+    sessions/<id>.stage<N>.mmd     each diagram, ready to paste into https://mermaid.live
+    sessions/<id>.stage<N>.frame<K>.mmd   the same for each frame of the attack chain (stage 3)
+The script also prints five random documented or secondary claims next to the Pack entries they cite, for the
 manual "five claims trace to the Pack" check.
 """
 
@@ -39,9 +40,9 @@ from src.researcher import AgentRunError, ApiKeyPresentError, TurnLimitError  # 
 from src.schemas import KnowledgePack  # noqa: E402
 from src.settings import SettingsError, load_settings  # noqa: E402
 from src.single_call import SingleCallFailedError  # noqa: E402
-from src.sources.nvd import normalize_cve_id  # noqa: E402
 from src.stage_content import StagesFile  # noqa: E402
 from src.stages_config import StagesConfigError, load_stages_config  # noqa: E402
+from src.topic import normalize_topic  # noqa: E402
 from src.trace import sample_claims  # noqa: E402
 
 SESSIONS = REPO_ROOT / "sessions"
@@ -76,9 +77,9 @@ def print_stage(stage) -> None:
 
 def print_trace(stages, pack, seed: int | None = None) -> None:
     claims, skipped = sample_claims(stages, pack, count=5, rng=random.Random(seed), with_counts=True)
-    print(f"\n=== Trace check: {len(claims)} random documented claims ({skipped} other blocks not sampled) ===")
+    print(f"\n=== Trace check: {len(claims)} random sourced claims ({skipped} other blocks not sampled) ===")
     for n, claim in enumerate(claims, 1):
-        print(f"\n  {n}. (stage {claim.stage_number}) {claim.text}\n     cites: {claim.source_url}")
+        print(f"\n  {n}. (stage {claim.stage_number}, {claim.tag}) {claim.text}\n     cites: {claim.source_url}")
         if not claim.matches:
             print("     ! no Pack entry carries this URL")
         if claim.matches:
@@ -170,8 +171,8 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    parser = argparse.ArgumentParser(description="Plan and write stages 1 to 3 for one CVE.")
-    parser.add_argument("cve_id", help="for example CVE-2021-44228")
+    parser = argparse.ArgumentParser(description="Plan and write stages 1 to 3 for one CVE or ATT&CK technique.")
+    parser.add_argument("topic", help="a CVE id (CVE-2021-44228) or an ATT&CK technique id (T1558.003)")
     parser.add_argument("--confirm", action="store_true", help="really call the model (uses subscription usage)")
     parser.add_argument("--stage", type=int, default=None,
                         help="write only this stage again from the saved stages (needs --confirm)")
@@ -179,18 +180,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        cve_id = normalize_cve_id(args.cve_id)
+        topic = normalize_topic(args.topic)
         settings = load_settings()
         config = load_stages_config()
     except (ValueError, SettingsError, StagesConfigError) as exc:
         print(f"Cannot start: {exc}")
         return 1
 
-    pack_path = SESSIONS / f"{cve_id}.researcher.json"
+    pack_path = SESSIONS / f"{topic}.researcher.json"
     try:
         pack = KnowledgePack.model_validate_json(pack_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        print(f"No Knowledge Pack at {pack_path}. Run scripts/run_researcher.py {cve_id} --confirm first.")
+        print(f"No Knowledge Pack at {pack_path}. Run scripts/run_researcher.py {topic} --confirm first.")
         return 1
     except ValidationError as exc:
         print(f"The saved Knowledge Pack is not valid: {exc}")

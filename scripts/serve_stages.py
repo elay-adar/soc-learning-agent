@@ -2,9 +2,10 @@
 
 Examples (run from the repo root):
     .venv\\Scripts\\python.exe scripts\\serve_stages.py CVE-2021-44228   (stages from run_stages.py)
+    .venv\\Scripts\\python.exe scripts\\serve_stages.py T1558.003        (a technique)
     .venv\\Scripts\\python.exe scripts\\serve_stages.py --demo           (invented sample data)
 
-It reads sessions/<CVE>.stages.json, written by scripts/run_stages.py --confirm, starts the page
+It reads sessions/<CVE or technique id>.stages.json, written by scripts/run_stages.py --confirm, starts the page
 server on 127.0.0.1 and prints one address. Open that exact address once: it carries the
 per-session token. Then type commands here: next, repeat N, help, quit.
 """
@@ -23,9 +24,9 @@ from pydantic import ValidationError  # noqa: E402
 
 from src.demo import demo_stages_file  # noqa: E402
 from src.server import DEFAULT_PORT, LocalServer, PageState  # noqa: E402
-from src.sources.nvd import normalize_cve_id  # noqa: E402
 from src.stage_content import StagesFile  # noqa: E402
 from src.terminal import HELP, handle_command  # noqa: E402
+from src.topic import normalize_topic  # noqa: E402
 
 SESSIONS = REPO_ROOT / "sessions"
 
@@ -33,18 +34,18 @@ SESSIONS = REPO_ROOT / "sessions"
 def load_file(args) -> StagesFile | None:
     if args.demo:
         return demo_stages_file()
-    if not args.cve_id:
-        print("Give a CVE id (for example CVE-2021-44228) or use --demo.")
+    if not args.topic:
+        print("Give a CVE id (CVE-2021-44228) or a technique id (T1558.003), or use --demo.")
         return None
     try:
-        path = SESSIONS / f"{normalize_cve_id(args.cve_id)}.stages.json"
+        path = SESSIONS / f"{normalize_topic(args.topic)}.stages.json"
     except ValueError as exc:
         print(f"Cannot start: {exc}")
         return None
     try:
         return StagesFile.model_validate_json(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        print(f"No saved stages at {path}. Run scripts/run_stages.py {args.cve_id} --confirm first.")
+        print(f"No saved stages at {path}. Run scripts/run_stages.py {args.topic} --confirm first.")
     except ValidationError as exc:
         print(f"The saved stages are not valid: {exc}")
     return None
@@ -52,7 +53,7 @@ def load_file(args) -> StagesFile | None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Show saved stages on the local page.")
-    parser.add_argument("cve_id", nargs="?", help="for example CVE-2021-44228")
+    parser.add_argument("topic", nargs="?", help="a CVE id (CVE-2021-44228) or a technique id (T1558.003)")
     parser.add_argument("--demo", action="store_true", help="show invented sample stages instead")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="preferred port (a free one is used if busy)")
     parser.add_argument("--open", action="store_true", help="open the address in the default browser")

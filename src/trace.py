@@ -1,8 +1,8 @@
 """Help for the manual "five random claims trace to the Pack" check (Milestone 3).
 
-A claim is one documented block. For each sampled claim we show the Pack entries that carry
-the same source URL, so a person can compare the sentence with what the Pack recorded.
-Inference and unknown blocks are not sampled: they claim no source.
+A claim is one documented or secondary block (D-027). For each sampled claim we show the Pack
+entries that carry the same source URL, so a person can compare the sentence with what the Pack
+recorded. Inference and unknown blocks are not sampled: they claim no source.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ class Claim:
     stage_number: int
     text: str
     source_url: str
+    tag: str = ProvenanceTag.DOCUMENTED.value  # "documented" or "secondary"
     matches: list[tuple[str, str]] = field(default_factory=list)  # best (Pack label, Pack value)
     same_url_total: int = 0  # how many Pack entries carry the same URL
 
@@ -39,12 +40,12 @@ def sample_claims(
     with_counts: bool = False,
     max_matches: int = 3,
 ):
-    """Pick up to `count` documented blocks at random, with the Pack entries they cite.
+    """Pick up to `count` documented or secondary blocks at random, with the Pack entries they cite.
 
     Most blocks cite the same URL, so the entries with that URL are ranked by how many
     words they share with the block and only the best `max_matches` are kept.
 
-    With with_counts=True returns (claims, number of blocks that were not documented).
+    With with_counts=True returns (claims, number of blocks that carry no source).
     """
     rng = rng or random.Random()
     entries = pack_entries(pack)
@@ -52,7 +53,7 @@ def sample_claims(
     skipped = 0
     for stage in stages:
         for block in stage.all_tagged():
-            if block.tag != ProvenanceTag.DOCUMENTED:
+            if block.tag not in (ProvenanceTag.DOCUMENTED, ProvenanceTag.SECONDARY):
                 skipped += 1
                 continue
             url = normalize_url(block.source_url)
@@ -64,7 +65,14 @@ def sample_claims(
             words = _words(block.value)
             ranked = sorted(same_url, key=lambda m: (-len(words & _words(m[1])), m[0]))
             documented.append(
-                Claim(stage.stage_number, block.value, block.source_url, ranked[:max_matches], len(same_url))
+                Claim(
+                    stage.stage_number,
+                    block.value,
+                    block.source_url,
+                    block.tag.value,
+                    ranked[:max_matches],
+                    len(same_url),
+                )
             )
     chosen = rng.sample(documented, min(count, len(documented)))
     return (chosen, skipped) if with_counts else chosen

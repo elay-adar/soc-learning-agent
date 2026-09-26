@@ -128,3 +128,31 @@ def test_documented_chain_details_can_be_sampled_as_claims():
     )
     claims = sample_claims([stage], pack, count=10)
     assert len(claims) == 3 and {c.source_url for c in claims} == {ATTACK}
+
+
+# ---- secondary blocks are sampled too (technique topics, D-033) --------------------------------
+
+
+def _technique_stage_and_pack():
+    from tests.test_stage_rules_secondary import PAGE, sec, technique_pack
+
+    pack = technique_pack()
+    stage = StageContent.model_validate(
+        {"stage_number": 2, "key": "why_possible", "title": "t",
+         "blocks": [sec("Service tickets are encrypted with the account password hash", PAGE), inf("An inference")],
+         "diagram": {"type": "architecture", "mermaid": "flowchart LR\n A[\"a\"] --> B[\"b\"]\n"}}
+    )
+    return stage, pack, PAGE
+
+
+def test_secondary_blocks_are_sampled_with_their_tag_and_pack_matches():
+    stage, pack, page = _technique_stage_and_pack()
+    claims, skipped = sample_claims([stage], pack, count=5, rng=random.Random(1), with_counts=True)
+    assert len(claims) == 1 and skipped == 1  # only the inference block is skipped
+    assert claims[0].tag == "secondary" and claims[0].source_url == page
+    assert claims[0].matches[0][0] == "weakness_mechanism[0]"  # the best word overlap under that URL
+
+
+def test_documented_claims_carry_the_documented_tag():
+    claims = sample_claims([STAGE1], make_pack(), count=5, rng=random.Random(1))
+    assert {c.tag for c in claims} == {"documented"}
