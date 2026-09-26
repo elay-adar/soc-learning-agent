@@ -25,12 +25,15 @@ from src.schemas import (
     ResponseItem,
     SourceConflict,
     SourcedValue,
+    ProvenanceTag,
     StrictModel,
 )
+from src.sources.secondary import SECONDARY_DOMAINS, is_secondary_url
 
 
 # Official sources the Researcher's tools read. A "documented" claim from the agent must cite one
 # of these (a subdomain counts, a look-alike such as nvd.nist.gov.example.com does not).
+# A "secondary" claim must cite SECONDARY_DOMAINS instead; the two lists are never mixed (D-030).
 OFFICIAL_DOMAINS = ("nvd.nist.gov", "cisa.gov", "attack.mitre.org", "cwe.mitre.org", "first.org")
 
 
@@ -123,12 +126,21 @@ def _check_documented_sources(
         url = value.source_url
         if not url:
             continue
-        if not is_official_url(url):
+        if value.tag == ProvenanceTag.SECONDARY:
+            if not is_secondary_url(url):
+                problems.append(
+                    f"{where}: a 'secondary' claim must cite an https page on the secondary-source "
+                    f"allowlist ({', '.join(SECONDARY_DOMAINS)}), not {url!r}"
+                )
+                continue
+        elif not is_official_url(url):
+            hint = " (a secondary source needs the tag 'secondary')" if is_secondary_url(url) else ""
             problems.append(
                 f"{where}: source_url {url!r} is not an official source "
-                f"(allowed: {', '.join(OFFICIAL_DOMAINS)})"
+                f"(allowed: {', '.join(OFFICIAL_DOMAINS)}){hint}"
             )
-        elif seen is not None and normalize_url(url) not in seen:
+            continue
+        if seen is not None and normalize_url(url) not in seen:
             problems.append(
                 f"{where}: source_url {url!r} was not returned by any tool in this run; "
                 "cite only a URL that appears as the source of a tool result"

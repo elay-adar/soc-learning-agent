@@ -136,7 +136,7 @@ def test_injected_instruction_in_a_description_stays_inside_the_data_block(tmp_p
 # ---- SDK wrapping ----
 
 
-def test_three_read_only_tools_with_expected_names():
+def test_four_read_only_tools_with_expected_names():
     tools = build_researcher_tools()
     assert tuple(t.name for t in tools) == TOOL_NAMES
     assert ALLOWED_TOOL_NAMES == tuple(f"mcp__researcher__{n}" for n in TOOL_NAMES)

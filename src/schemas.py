@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class ProvenanceTag(str, Enum):
     DOCUMENTED = "documented"
+    SECONDARY = "secondary"  # from the secondary-source allowlist, never official (D-027)
     INFERENCE = "inference"
     UNKNOWN = "unknown"
 
@@ -103,8 +104,8 @@ class SourcedValue(StrictModel):
 
     @model_validator(mode="after")
     def check_source(self) -> SourcedValue:
-        if self.tag == ProvenanceTag.DOCUMENTED and not self.source_url:
-            raise ValueError("a 'documented' item needs a source_url")
+        if self.tag in (ProvenanceTag.DOCUMENTED, ProvenanceTag.SECONDARY) and not self.source_url:
+            raise ValueError(f"a '{self.tag.value}' item needs a source_url")
         if self.source_url and not self.source_url.startswith(("http://", "https://")):
             raise ValueError("source_url must start with http:// or https://")
         return self

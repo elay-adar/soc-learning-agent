@@ -1,8 +1,9 @@
-"""Read-only tools for the Researcher agent: NVD, CISA KEV and MITRE ATT&CK lookups.
+"""Read-only tools for the Researcher agent: NVD, CISA KEV and MITRE ATT&CK lookups, plus one
+secondary-source page reader limited to a two-domain allowlist (D-030).
 
 Each lookup is a plain function that returns text, so it can be tested without a model.
-`build_researcher_server` wraps them for the Agent SDK. The tools only read from official
-sources and never write anything. Their output is wrapped in markers that tell the model
+`build_researcher_server` wraps them for the Agent SDK. The tools only read (from official
+sources, or from the allowlist for the secondary tool) and never write anything. Their output is wrapped in markers that tell the model
 it is untrusted data (text from the web), never instructions.
 """
 
@@ -19,9 +20,16 @@ from src.sources.attack import TECHNIQUE_ID_PATTERN, AttackFormatError, fetch_at
 from src.sources.http_cache import DEFAULT_CACHE_DIR, Downloader, FetchError, download_json
 from src.sources.kev import KEV_CATALOG_PAGE, KevFormatError, fetch_kev_catalog
 from src.sources.nvd import NvdFormatError, fetch_nvd_record, normalize_cve_id
+from src.sources.secondary import (
+    SECONDARY_DOMAINS,
+    PageDownloader,
+    download_page,
+    html_to_text,
+    is_secondary_url,
+)
 
 SERVER_NAME = "researcher"
-TOOL_NAMES = ("get_nvd_record", "get_kev_entry", "get_attack_technique")
+TOOL_NAMES = ("get_nvd_record", "get_kev_entry", "get_attack_technique", "get_secondary_source")
 # The names the model sees, in the form the SDK uses for tools from an in-process server.
 ALLOWED_TOOL_NAMES = tuple(f"mcp__{SERVER_NAME}__{name}" for name in TOOL_NAMES)
 
@@ -164,6 +172,28 @@ def lookup_attack(
     return wrap_untrusted(technique.url, body)
 
 
+def lookup_secondary(url: str, *, downloader: PageDownloader = download_page) -> str:
+    """Read one page from the secondary-source allowlist (D-030). The allowlist is checked here,
+    before any download, so a fake downloader in a test cannot skip it."""
+    url = url.strip()
+    if not is_secondary_url(url):
+        return (
+            f"ERROR: {url!r} is not an https page on the secondary-source allowlist "
+            f"({', '.join(SECONDARY_DOMAINS)})"
+        )
+    try:
+        text = html_to_text(downloader(url))
+    except FetchError as exc:
+        return f"ERROR: the page could not be read: {exc}"
+    if not text:
+        return f"ERROR: no readable text was found on {url}"
+    body = (
+        "SECONDARY SOURCE, not an official source. Any claim taken from this text must be tagged "
+        "'secondary', never 'documented'.\n" + text
+    )
+    return wrap_untrusted(url, body)
+
+
 def _text_result(text: str) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}], "is_error": text.startswith("ERROR:")}
 
@@ -174,8 +204,9 @@ def build_researcher_tools(
     nvd_downloader: Downloader = download_json,
     kev_downloader: Downloader = download_json,
     attack_downloader: Any = None,
+    page_downloader: PageDownloader = download_page,
 ) -> list[SdkMcpTool[Any]]:
-    """The three Researcher tools. Downloaders can be replaced, so tests never use the network."""
+    """The four Researcher tools. Downloaders can be replaced, so tests never use the network."""
     read_only = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
     @tool(
@@ -216,9 +247,21 @@ def build_researcher_tools(
             )
         )
 
-    return [get_nvd_record, get_kev_entry, get_attack_technique]
+    @tool(
+        "get_secondary_source",
+        "Read one web page from the SECONDARY-source allowlist (crowdstrike.com, picussecurity.com). "
+        "Use it only to build attack steps or explain a mechanism when no official source gives "
+        "that detail. Never use it for a fact an official source covers. Claims taken from it must "
+        "be tagged 'secondary'. Input: the full https URL of the page.",
+        {"url": str},
+        annotations=read_only,
+    )
+    async def get_secondary_source(args: dict[str, Any]) -> dict[str, Any]:
+        return _text_result(lookup_secondary(str(args.get("url", "")), downloader=page_downloader))
+
+    return [get_nvd_record, get_kev_entry, get_attack_technique, get_secondary_source]
 
 
 def build_researcher_server(**kwargs: Any):
-    """An in-process tool server holding the three tools, ready for ClaudeAgentOptions."""
+    """An in-process tool server holding the four tools, ready for ClaudeAgentOptions."""
     return create_sdk_mcp_server(SERVER_NAME, tools=build_researcher_tools(**kwargs))

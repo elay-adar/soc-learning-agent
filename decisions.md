@@ -460,3 +460,23 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 **Alternatives considered:** Including Abnormal AI for its content quality (rejected: reputation bar matters more than one good article, and the allowlist should stay small); a single "vendor blog" catch-all instead of naming Microsoft specifically (rejected: D-005 already has a vendor-advisory category, no need for a new rule).
 **Why:** The allowlist should be short, defensible on the vendor's/site's own standing, and never a substitute for an official source that already exists.
 **Consequences:** `src/researcher_tools.py`'s secondary-source tool, when built, reads only these two domains. Vendor-advisory tooling (existing or to be built) should recognize `microsoft.com`/`learn.microsoft.com` as official for Microsoft-product topics. The allowlist can grow later through the same review process (fetch, check against the three criteria, confirm reputation).
+
+
+---
+
+## D-031: Secondary-source tool built; vendor-advisory tool is a known gap
+
+**Date:** 2026-09-26 | **Status:** Accepted
+
+**Context:** D-029 and D-030 called for a secondary-source tool for the Researcher. It is now built: `get_secondary_source` in `src/researcher_tools.py`, with its allowlist, page fetch and text extraction in `src/sources/secondary.py`.
+
+**Decision:**
+- The tool reads one https page on `crowdstrike.com` or `picussecurity.com` (subdomains count, look-alikes do not). The check runs in code before any download. A redirect that leaves the allowlist is refused, not followed. Only the standard library is used (no new dependency).
+- `ProvenanceTag` gains `secondary`, which needs a `source_url` like `documented`.
+- `src/merge.py` keeps two separate lists. A `documented` claim must cite an official domain, a `secondary` claim must cite an allowlist domain, and both must cite a URL a tool returned in this run. Mixing them is rejected, with a hint in the error message.
+- The Researcher prompt limits the tool to building `attack_steps` when no official result gives a step breakdown.
+
+**Known gap (not fixed here):** there is no vendor-advisory tool yet. D-030 classes `microsoft.com` and `learn.microsoft.com` as official for Microsoft-product topics, but nothing can read them. For a topic like Kerberoasting, stage 2 therefore has no official source at all, only the secondary allowlist, until a vendor-advisory tool is built as a separate task.
+
+**Not yet done (still open from D-029's consequences):** `stage_rules.py` does not yet check `secondary` blocks or the "no CVE or CWE" statement, and `config/stages.toml` and the Lecturer prompt are unchanged. `run_researcher` is still CVE-only, so no live run has used the new tool yet.
+**Why:** Keeps the Researcher's reach small and enforced in code, and records honestly where official coverage is still missing.
