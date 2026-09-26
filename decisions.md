@@ -586,3 +586,26 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 - The support check compares words, not meaning. A wrong claim made of familiar words scores high, and the "other URL" hint is noisy because the long ATT&CK description shares many common words.
 - The 10-block limit and "define a term before use" are prompt-only.
 - Verified only by replaying the saved first-run stages through the new code, not yet by a fresh live run.
+
+---
+
+## D-037: Documented sentences must be supported by their source; two secondary-text limits accepted
+
+**Date:** 2026-09-26 | **Status:** Accepted
+
+**Context:** The second live stages run on Kerberoasting (T1558.003), after D-036, had 7 weakly supported sentences (down from 9). One was the model's own remark inside a `documented` block: "Those are consequences after the flow ends, not steps inside it." It scored 0% word overlap with the ATT&CK entry it cited. D-036's prompt rule already forbids this, and only the warn-only hint caught it.
+
+**Decision:**
+- `src/stage_rules.py` rejects a `documented` sentence (with at least 4 content words) whose share of words found in the Pack entries under its URL is below `DOCUMENTED_LIMIT = 0.3` (exactly 0.3 passes). The message names the sentence and tells the model to put its own remark in an `inference` block. It applies to blocks, stage 3 step details and glossary definitions, for CVE and technique topics.
+- `secondary` and `inference` text is not rejected by this rule. The 0.6 warning of D-036 stays warn-only.
+- The Lecturer prompt says code rejects such a sentence.
+- Code move: `pack_entries` and `pack_urls` now live in `src/pack_entries.py` (still importable from `src/stage_rules.py`), so the stage rules can use `src/support_check.py` without an import cycle.
+
+**Why 0.3, and only for documented text:** documented text restates an official source, so a sentence with almost no shared words is the model's own addition. Across the two runs the only documented sentence below 0.3 was this real violation, and none of the ones above it was. Under 0.6 the secondary hits included harmless bridging sentences ("... as explained in stage 2"), so a rejection there would force needless corrections. Replaying the second run's saved stages: stages 1 and 2 pass, stage 3 is rejected on that one sentence.
+
+**Accepted limitations (recorded so they are not lost; wording left as it is, not blocking):**
+1. **An added consequence under a source URL.** Stage 1 says "a low-privilege foothold can quietly become control of a service account", tagged `secondary` and citing the CrowdStrike page. The Pack entries under that URL do not say it. It appeared in both live runs.
+2. **Background from model memory under a source URL.** Stage 1 says Kerberos's "normal job is to let users prove who they are to services without sending passwords over the network", tagged `secondary` and citing the Picus page. The Picus entries do not say it.
+Both are `secondary` text, so the support check lists them as weakly supported (22% and 29% of words found) but does not reject them. The sample is two runs with one documented hit, so 0.3 may need revisiting; both limits follow from D-020's known limit that a URL check proves a citation, not that the sentence is supported.
+
+**Known limits:** the rule compares words, not meaning, so a wrong documented claim made of words the entry contains still passes. The 0.3 limit was set from two runs on one topic.

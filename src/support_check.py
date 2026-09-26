@@ -17,12 +17,15 @@ import re
 from dataclasses import dataclass, field
 
 from src.merge import normalize_url
+from src.pack_entries import pack_entries
 from src.schemas import KnowledgePack, ProvenanceTag
 from src.stage_content import StageContent
-from src.stage_rules import pack_entries
 
 THRESHOLD = 0.6  # a sentence sharing fewer than 60% of its content words with its URL's entries is flagged
 MIN_WORDS = 4  # shorter sentences are skipped: too little to compare
+# D-037: a documented sentence below this is rejected by the stage rules. Documented text must restate
+# an official source, and on two real runs the only documented sentence this low was the model's own remark.
+DOCUMENTED_LIMIT = 0.3
 
 _STOP = frozenset(
     (
@@ -64,6 +67,26 @@ def split_sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?;])\s+", text) if s.strip()]
 
 
+def url_pools(pack: KnowledgePack) -> dict[str, set[str]]:
+    """For each source URL in the Pack, the content words of all the entries that cite it."""
+    pools: dict[str, set[str]] = {}
+    for _, entry in pack_entries(pack):
+        if entry.source_url:
+            pools.setdefault(normalize_url(entry.source_url), set()).update(content_words(entry.value))
+    return pools
+
+
+def sentence_scores(text: str, pool: set[str]) -> list[tuple[str, float, list[str]]]:
+    """(sentence, share of its content words found in `pool`, the words not found), for each
+    sentence with at least MIN_WORDS content words."""
+    scores = []
+    for sentence in split_sentences(text):
+        words = content_words(sentence)
+        if len(words) >= MIN_WORDS:
+            scores.append((sentence, len(words & pool) / len(words), sorted(words - pool)))
+    return scores
+
+
 @dataclass
 class WeakSentence:
     stage_number: int
@@ -80,11 +103,7 @@ def weak_sentences(
 ) -> list[WeakSentence]:
     """Sentences below `threshold`, worst first. Blocks, stage 3 step details and glossary
     definitions are checked; inference and unknown text claims no source and is ignored."""
-    pools: dict[str, set[str]] = {}
-    for _, entry in pack_entries(pack):
-        if entry.source_url:
-            pools.setdefault(normalize_url(entry.source_url), set()).update(content_words(entry.value))
-
+    pools = url_pools(pack)
     found: list[WeakSentence] = []
     for stage in stages:
         for block in stage.all_tagged():
@@ -92,14 +111,9 @@ def weak_sentences(
                 continue
             url = normalize_url(block.source_url)
             pool = pools.get(url, set())
-            for sentence in split_sentences(block.value):
-                words = content_words(sentence)
-                if len(words) < MIN_WORDS:
-                    continue
-                coverage = len(words & pool) / len(words)
+            for sentence, coverage, missing in sentence_scores(block.value, pool):
                 if coverage >= threshold:
                     continue
-                missing = sorted(words - pool)
                 other = sorted(
                     other_url
                     for other_url, other_pool in pools.items()

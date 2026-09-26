@@ -17,6 +17,7 @@ from src.frames import FrameError, build_frames
 from src.glossary import repeated_terms
 from src.mermaid_check import MermaidError, check_mermaid
 from src.merge import normalize_url
+from src.pack_entries import pack_entries, pack_urls
 from src.schemas import (
     DiagramType,
     ExploitationStatus,
@@ -29,6 +30,7 @@ from src.schemas import (
 )
 from src.sources.secondary import is_secondary_url
 from src.stage_content import StageContent
+from src.support_check import DOCUMENTED_LIMIT, sentence_scores, url_pools
 
 NO_INCIDENT_PHRASE = "No documented incident from official sources"
 OVERVIEW_KEY = "overview"
@@ -65,25 +67,6 @@ class StageRuleError(ValueError):
     """The stage breaks one or more rules. The message lists every problem."""
 
 
-def pack_entries(pack: KnowledgePack) -> list[tuple[str, SourcedValue]]:
-    """Every sourced item in the Pack, with a label saying where it sits."""
-    entries: list[tuple[str, SourcedValue | None]] = [("exploitation_evidence", pack.exploitation_evidence)]
-    entries += [(f"weakness_mechanism[{i}]", w) for i, w in enumerate(pack.weakness_mechanism)]
-    entries += [(f"triage_fields.{name}", f.item) for name, f in pack.triage_fields.items()]
-    entries += [(f"incidents[{i}] impact ({inc.name})", inc.impact) for i, inc in enumerate(pack.incidents)]
-    entries += [(f"attack_steps[{step.number}]", step.action) for step in pack.attack_steps]
-    entries += [(f"detection_items[{i}]", d.content) for i, d in enumerate(pack.detection_items)]
-    entries += [(f"response_items[{i}]", r.content) for i, r in enumerate(pack.response_items)]
-    for i, conflict in enumerate(pack.conflicts):
-        entries += [(f"conflicts[{i}].claims[{j}]", c) for j, c in enumerate(conflict.claims)]
-    return [(label, item) for label, item in entries if item is not None]
-
-
-def pack_urls(pack: KnowledgePack) -> set[str]:
-    """Every source URL that appears anywhere in the Pack (trailing slashes ignored)."""
-    return {normalize_url(item.source_url) for _, item in pack_entries(pack) if item.source_url}
-
-
 def check_stage(
     content: StageContent,
     pack: KnowledgePack,
@@ -100,6 +83,7 @@ def check_stage(
     if content.key != item.key:
         problems.append(f"key is '{content.key}', expected '{item.key}'")
     problems += _source_problems(content, pack)
+    problems += _documented_support_problems(content, pack)
 
     if item.diagram == DiagramType.KILL_CHAIN_FRAMES:
         problems += _frames_problems(content, pack)
@@ -165,6 +149,25 @@ def _source_problems(content: StageContent, pack: KnowledgePack) -> list[str]:
             problems.append(f"a secondary block cites {url}, which is not a secondary-source page")
         elif block.tag == ProvenanceTag.SECONDARY and ProvenanceTag.DOCUMENTED in tags_by_url[normalize_url(url)]:
             problems.append(f"a secondary block cites {url}, which the Knowledge Pack records as documented")
+    return problems
+
+
+def _documented_support_problems(content: StageContent, pack: KnowledgePack) -> list[str]:
+    """D-037: documented text restates an official source, so a sentence that shares almost none of
+    its words with the Pack entries under its URL is rejected. Secondary text is only warned about
+    (src/support_check.py). A URL missing from the Pack is already reported by _source_problems."""
+    pools = url_pools(pack)
+    problems: list[str] = []
+    for block in content.all_tagged():
+        if block.tag != ProvenanceTag.DOCUMENTED or normalize_url(block.source_url) not in pools:
+            continue
+        for sentence, coverage, _ in sentence_scores(block.value, pools[normalize_url(block.source_url)]):
+            if coverage < DOCUMENTED_LIMIT:
+                problems.append(
+                    f'a documented sentence "{sentence[:90]}" shares only {coverage:.0%} of its words with the '
+                    f"entries under {block.source_url}; documented text must restate the source, so put your "
+                    "own remark in a block tagged inference"
+                )
     return problems
 
 

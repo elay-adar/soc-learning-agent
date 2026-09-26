@@ -546,3 +546,8 @@ def test_stage_3_detail_may_keep_a_short_tie_back_to_stage_2():
 
     system, _ = stage3_prompts(chain_pack())
     assert 'a short tie-back to stage 2 may stay in the same block' in system
+
+
+def test_prompt_says_code_rejects_an_unsupported_documented_sentence():
+    system, _ = prompts()
+    assert 'Code rejects a documented sentence that shares almost no words with the entries under its URL' in system
