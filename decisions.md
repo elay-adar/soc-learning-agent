@@ -346,3 +346,25 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 - Stage 2 also explains JNDI and remote code execution inside blocks, next to the glossary entries. The prompt forbids this and code cannot see it (a stated limit).
 - "Remote code execution" and "CISA KEV catalog" may be terms a general SOC course already teaches, so they could count as over-defining. This is the judgment the decision leaves to the model, and nothing here is measured yet.
 - Stage 3 introduced no new term, so its glossary is empty, which is allowed.
+
+
+---
+
+## D-026: Live "next" versus a pre-built session (to discuss)
+
+**Date:** 2026-09-26 | **Status:** Open (not decided, nothing built)
+
+**Context:** `spec.md` section 3 (Workflow) describes `next` as the command that advances the agent to the next stage. D-023 decided, for Milestone 4, that none of the terminal commands (`next`, `repeat N`, `help`, `quit`) call a model: `scripts/serve_stages.py` only displays stages already written by a separate, earlier run of `scripts/run_stages.py --confirm`. That split let the page be tested without spending usage on every check, but the running product does not yet match the workflow the spec describes: one running process where `next` builds the next stage on demand.
+
+**Question:** When does `next` move from "reveal the next saved stage" to "ask the Orchestrator to write the next stage now, then show it"? Does a no-cost pre-built/demo path stay alongside the live path, or does the live path replace it?
+
+**What it would take (an architecture change, not a small fix):**
+- One running process holding a live `KnowledgePack`, `StagePlan` and the stages written so far, instead of today's two separate scripts (build, then serve).
+- `terminal.py`'s `handle_command` calling into `src/orchestrate.py` for `next` instead of only reading `PageState`; the terminal loop becomes async and must handle a slow or failing model call, which today's design ("no model call happens here") does not need to.
+- A way to show the page is "writing stage N" while the call is in flight, and how a Lecturer error reaches the user without stopping the loop.
+- Cost awareness (CLAUDE.md): each `next` would spend usage, so the user should know that before typing it.
+- Whether `scripts/run_researcher.py` and `scripts/run_stages.py --confirm` fold into the live loop or stay as separate manual/debug entry points, as their docstrings already frame them.
+
+**Not doing now:** this is a bigger integration step than a single milestone task. Spec section 15's open question 8 ("the final list of terminal commands") stays open alongside this.
+
+**To settle when discussed:** whether `serve_stages.py` / `--demo` stays as a no-cost preview path once the live path exists, and which milestone this belongs to (it has no number yet in section 16).
