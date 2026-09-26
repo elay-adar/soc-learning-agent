@@ -53,7 +53,7 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 
 ## D-005: Official sources only, with provenance tags
 
-**Date:** 2026-09-24 | **Status:** Accepted
+**Date:** 2026-09-24 | **Status:** Accepted; amended by D-027
 
 **Decision:** Allowed sources are NVD, CISA KEV, MITRE ATT&CK and CWE, vendor advisories, FIRST EPSS, and official incident disclosures. Every item is tagged `[Documented]`, `[Inference]` or `[Unknown]`. Conflicts between sources are shown openly. When no incident is documented, the agent states "No documented incident from official sources".
 **Alternatives considered:** Allowing blogs, community detection rules, and exploit databases.
@@ -368,3 +368,39 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 **Not doing now:** this is a bigger integration step than a single milestone task. Spec section 15's open question 8 ("the final list of terminal commands") stays open alongside this.
 
 **To settle when discussed:** whether `serve_stages.py` / `--demo` stays as a no-cost preview path once the live path exists, and which milestone this belongs to (it has no number yet in section 16).
+
+
+---
+
+## D-027: Secondary sources allowed, tagged separately (amends D-005)
+
+**Date:** 2026-09-26 | **Status:** Accepted
+
+**Context:** D-005 allowed official sources only. The clearest, deepest explanations of a technique's mechanism (for example the Kerberos design flaw behind Kerberoasting) often live in well-known professional security sites, not in an official source with a fetchable API. Official-only leaves stage 2 (the weakness) thin for techniques that have no CVE/CWE.
+**Decision:**
+- A fourth provenance value is added: `secondary`, alongside `documented`, `inference` and `unknown`. It is kept distinct from `documented`; a secondary source is never presented as official.
+- Secondary sources come from a fixed allowlist of reputable, well-known sites, not anonymous forums or random blogs. Candidates reviewed this session: Abnormal AI, Picus Security, CrowdStrike, PortSwigger. The final list is fixed when the tool is built.
+- Official sources (NVD, CISA KEV, MITRE ATT&CK/CWE, vendor advisories, FIRST EPSS, official incident disclosures) stay the only `documented` sources.
+- The learner sees the official-versus-secondary distinction, so interview confidence is not built on a blog presented as authoritative.
+
+**Alternatives considered:** Keep official-only (stage 2 stays thin for CVE/CWE-less techniques); allow any site (unreliable, defeats the confidence goal); merge secondary into `documented` (hides that a claim is not official).
+**Why:** The learning goal needs mechanism depth that official sources sometimes lack, without pretending a secondary source is authoritative.
+**Consequences:** The provenance schema, the Researcher's allowed-domain check, and the page's tag display all change when implemented. Spec success criterion 2 is updated: every claim is `documented` (official), `secondary` (allowlist), `inference` or `unknown`.
+
+---
+
+## D-028: Scope is one technique plus its enabling weakness; stage model revised
+
+**Date:** 2026-09-26 | **Status:** Accepted (design; code change pending in Claude Code)
+
+**Context:** While designing stages 1-3 for the Kerberoasting prototype, we clarified that a MITRE ATT&CK (sub-)technique such as Kerberoasting (T1558.003) is a single point in the taxonomy (tactic > technique > sub-technique > procedure), not a multi-technique kill chain. The spec's stage 3 wording ("kill chain / spread") wrongly implied a chain of several techniques.
+**Decision:**
+- **Scope:** the agent is a learning tool for one technique (or one weakness) plus the weakness that enables it. It does not explain a full multi-technique intrusion. This matches the input model (one technique/CVE/CWE at a time) and D-004. Situating the technique inside a broader kill chain (option B) was rejected for the prototype (requires choosing and validating surrounding techniques, expands scope); it may return later.
+- **Stage 1 (Overview), revised content:** a clear definition of the technique first; what assumption or trust is broken (conceptual); what the attacker achieves, with emphasis on the payload obtained (for example an encrypted secret for offline cracking, internal user credentials, sensitive server data); the component/protocol/configuration and its normal function; the root cause (which security assumption broke); preconditions (privileges, network access), all conceptual; the SOC angle of why it matters. It no longer describes "what an analyst might see" (that is stage 4) and, for the attack-first prototype, drops the exploitation-status tag (that was for a vulnerability-first topic). Diagram: one static picture.
+- **Stage 2 (The weakness), broadened:** a deep but accessible technical explanation of the weakness, including a view of the flawed architecture. When a CVE/CWE exists it is the anchor; when none exists (Kerberoasting has neither), stage 2 explains the protocol or design flaw itself and the CVE/CWE fields are `not_applicable`. Diagram by complexity.
+- **Stage 3 (Execution flow), reframed:** the internal execution steps of the single technique, in order, not a kill chain of several techniques. The cumulative-frames mechanism (D-008, D-023) is unchanged; only the framing and naming change. Diagram: frames with Previous/Next, one explanation revealed per frame.
+- **Stages 4 and 5:** not designed now. Work on them starts only after stages 1-3 are fully done and reviewed on a real technique (D-017).
+
+**Alternatives considered:** Option B (technique inside a broader kill chain) - richer but fuzzy and scope-expanding, rejected for now. Dropping stage 3 - rejected: the frames mechanism is sound, only its framing was wrong.
+**Why:** Matches the real MITRE taxonomy and the input model, keeps scope achievable, and salvages the existing stage-3 work.
+**Consequences:** spec.md sections 3, 6.2 and 7 need updating (stage 3 wording, stage 1/2 content, "kill chain" language) when the design moves to spec. Stage 3 code keeps its frame builder; its labels and prompt wording change. The words "kill chain" leave the learner-facing text.
