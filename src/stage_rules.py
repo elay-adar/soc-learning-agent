@@ -50,8 +50,14 @@ _INTERNAL_NAME = re.compile(r"\b(?:knowledge\s+)?pack\b", re.IGNORECASE)
 _TECHNIQUE_IN_TEXT = re.compile(r"\bT\d{4}(?:\.\d{3})?\b")
 # D-028: the learner-facing text never says "kill chain" (a technique is one step, not a chain).
 _KILL_CHAIN = re.compile(r"\bkill[\s-]*chain", re.IGNORECASE)
-# D-029: stage 1 is conceptual, so none of these belong in its prose.
-_STAGE1_FORBIDDEN = re.compile(r"\bCWE-\d+|\bCVSS\b|\bT\d{4}(?:\.\d{3})?\b", re.IGNORECASE)
+# D-029, D-036: stage 1 is conceptual, so none of these belong in its prose: identifiers, scores,
+# and the names of encryption algorithms (which belong to the mechanism in stage 2).
+_STAGE1_FORBIDDEN = re.compile(
+    r"\bCWE-\d+|\bCVSS\b|\bT\d{4}(?:\.\d{3})?\b|\b(?:RC4|AES(?:[-\s]?\d+)?|3?DES|NTLM|etype)\b",
+    re.IGNORECASE,
+)
+# D-036: stage 2 explains the design flaw; the attacker's numbered procedure is stage 3.
+_STEP_LABEL = re.compile(r"^\s*(?:failure\s+mechanism\s*,?\s*)?step\s*\d+\b", re.IGNORECASE)
 _CVE_OR_CWE_ID = re.compile(r"\b(?:CVE-\d{4}-\d+|CWE-\d+)\b", re.IGNORECASE)
 
 
@@ -163,12 +169,13 @@ def _source_problems(content: StageContent, pack: KnowledgePack) -> list[str]:
 
 
 def _overview_problems(content: StageContent) -> list[str]:
-    for text in (content.title, *(b.value for b in content.all_tagged())):
+    texts = (content.title, *(g.term for g in content.glossary), *(b.value for b in content.all_tagged()))
+    for text in texts:
         found = _STAGE1_FORBIDDEN.search(text)
         if found:
             return [
-                "the stage 1 text must not contain a CWE id, a CVSS mention or an ATT&CK technique id "
-                f"(found '{found.group(0)}'): those belong to later stages"
+                "the stage 1 text must not contain a CWE id, a CVSS mention, an ATT&CK technique id "
+                f"or an algorithm name (found '{found.group(0)}'): those belong to later stages"
             ]
     return []
 
@@ -273,6 +280,12 @@ def _why_possible_problems(content: StageContent, pack: KnowledgePack) -> list[s
     has_documented_block = any(b.tag == ProvenanceTag.DOCUMENTED for b in content.blocks)
     if documented_weakness and not has_documented_block:
         problems.append("the Pack documents the weakness, so stage 2 needs at least one documented block")
+
+    if any(_STEP_LABEL.match(b.value) for b in content.blocks):
+        problems.append(
+            "stage 2 lists the attack steps ('Step N: ...'); the attacker's steps belong to stage 3, "
+            "so explain how the design flaw works instead"
+        )
 
     joined = " ".join(b.value for b in content.all_tagged())
     says_none = NO_CVE_CWE_PHRASE.lower() in joined.lower()

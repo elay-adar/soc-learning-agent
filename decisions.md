@@ -564,3 +564,25 @@ Each entry records what was decided, why, and what was rejected. Entries are nev
 - The Planner, the Lecturer and the stage rules needed no change: they already read the topic type from the Pack (D-032).
 
 **Known limits:** the first live run of stages 1 to 3 on a technique Pack has not been done, so the Lecturer prompt and rules of D-032 are still untested against a real model on this path.
+
+---
+
+## D-036: Stage 1 and 2 scope checks, tighter Lecturer wording, and a support-check hint
+
+**Date:** 2026-09-26 | **Status:** Accepted
+
+**Context:** The first live stages run on Kerberoasting (T1558.003) passed every rule on the first attempt, and a read of the output found: stage 1 too long (12 blocks) and explaining mechanism (how the ticket key is derived, RC4); stage 2 restating the attacker's six steps, which stage 3 then repeats; RC4 and AES used in stage 1 but defined only in stage 2; and sentences that add a clause the cited page's Pack entries do not hold, or credit a page with something another page said (D-020's known limit).
+
+**Decision:**
+- `src/stage_rules.py`: stage 1 text (title, glossary terms, blocks) may not name an encryption algorithm (RC4, AES, DES, 3DES, NTLM, etype), on top of CWE ids, CVSS and ATT&CK ids. Stage 2 is rejected when a block starts with "Step N" or "Failure mechanism, step N". Both would have rejected the first run's stages 1 and 2.
+- Lecturer prompt: stage 1 is at most 10 blocks and explains no mechanism; stage 2 explains how the design flaw works and lists no attacker steps; a term is defined in the first stage that uses it; every sentence of a documented or secondary block must be supported by the Pack entries under its URL, and anything of the model's own goes in an inference block. Stage 3 keeps one exception: a short tie-back to stage 2 may stay in a step's detail, since that detail is a single tagged block.
+- `src/support_check.py`: for each documented or secondary sentence with at least 4 content words it measures how many appear in the Pack entries under the cited URL, and warns below 0.6 (exactly 0.6 passes). It also lists other Pack URLs that hold some of the missing words. `run_stages.py` prints the list after the trace check as a hint for the manual check.
+
+**Why a warning and not a rejection:** on the first run 9 of 59 sentences fell below 0.6. Five were real additions or misattributions, one a borderline paraphrase and three harmless bridging sentences ("... described in stage 2"). A rejection would have forced corrections on about a third of the hits and pushed the model to drop useful bridging text.
+
+**Alternatives considered:** reject below 0.6 (too many false hits); a lower hard limit only (the worst real hit scored higher than the worst bridging sentence); a check of "term used before defined" across stages (the Lecturer cannot see later stages, so the stage 1 algorithm ban and the prompt rule stand in for it).
+
+**Known limits:**
+- The support check compares words, not meaning. A wrong claim made of familiar words scores high, and the "other URL" hint is noisy because the long ATT&CK description shares many common words.
+- The 10-block limit and "define a term before use" are prompt-only.
+- Verified only by replaying the saved first-run stages through the new code, not yet by a fresh live run.

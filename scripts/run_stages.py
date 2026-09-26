@@ -42,6 +42,7 @@ from src.settings import SettingsError, load_settings  # noqa: E402
 from src.single_call import SingleCallFailedError  # noqa: E402
 from src.stage_content import StagesFile  # noqa: E402
 from src.stages_config import StagesConfigError, load_stages_config  # noqa: E402
+from src.support_check import weak_sentences  # noqa: E402
 from src.topic import normalize_topic  # noqa: E402
 from src.trace import sample_claims  # noqa: E402
 
@@ -88,6 +89,16 @@ def print_trace(stages, pack, seed: int | None = None) -> None:
             print(f"     Pack {label}: {value}")
 
 
+def print_weak(stages, pack) -> None:
+    weak = weak_sentences(stages, pack)
+    print(f"\n=== Weakly supported sentences: {len(weak)} (a hint for the manual check, not a rule) ===")
+    for n, w in enumerate(weak, 1):
+        print(f"\n  {n}. (stage {w.stage_number}, {w.tag}, {w.coverage:.0%} of its words found) {w.sentence}")
+        print(f"     cites: {w.source_url}\n     not found under that URL: {', '.join(w.missing)}")
+        if w.other_urls:
+            print(f"     some of those words appear under: {', '.join(w.other_urls)}")
+
+
 def show_result(run, pack, seed: int | None = None) -> None:
     plan = run.file.plan
     print(f"\n=== Stage plan: {plan.stage_count} stages ===")
@@ -99,6 +110,7 @@ def show_result(run, pack, seed: int | None = None) -> None:
     for stage in run.file.stages:
         print_stage(stage)
     print_trace(run.file.stages, pack, seed)
+    print_weak(run.file.stages, pack)
 
     print("\n--- Run metrics ---")
     show_metrics("Planner", run.planner_metrics)
@@ -159,6 +171,7 @@ def rerun_one_stage(pack, number, lecturer_settings, config, seed) -> int:
     stage = new_file.stages[number - 1]
     print_stage(stage)
     print_trace([stage], pack, seed)
+    print_weak([stage], pack)
     print("\n--- Run metrics ---")
     show_metrics(f"Stage {number}", metrics)
     path.write_text(new_file.model_dump_json(indent=2), encoding="utf-8")

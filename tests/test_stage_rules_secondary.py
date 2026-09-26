@@ -198,3 +198,38 @@ def test_stage_3_of_a_technique_still_rejects_other_ids():
     bad = stage3(pack, blocks=[sec("This also maps to T1078")])
     with pytest.raises(StageRuleError, match="T1078"):
         check_stage(bad, pack, CHAIN)
+
+
+# ---- D-036: stage 1 names no algorithm; stage 2 does not restate the attacker's steps -------------
+
+
+@pytest.mark.parametrize("text", ["Tickets use RC4 today", "Newer tickets use AES-256", "Old hashes use NTLM", "It uses etype 23"])
+def test_stage_1_prose_names_no_algorithm(text):
+    with pytest.raises(StageRuleError, match="stage 1 text must not contain.*algorithm"):
+        check_stage(stage1(inf(text)), technique_pack(), OVERVIEW)
+
+
+def test_stage_1_glossary_terms_and_definitions_are_checked_too():
+    content = StageContent.model_validate({
+        "stage_number": 1, "key": "overview", "title": "t", "blocks": [inf("A credential access technique")],
+        "glossary": [{"term": "RC4", "definition": inf("An older encryption algorithm")}],
+        "diagram": {"type": "story_flow", "mermaid": FLOW},
+    })
+    with pytest.raises(StageRuleError, match="algorithm"):
+        check_stage(content, technique_pack(), OVERVIEW)
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["Step 3: the attacker asks for a ticket", "Failure mechanism, step 1: the attacker logs in", "step 2 - scan"],
+)
+def test_stage_2_may_not_list_the_attack_steps(label):
+    content = stage2(inf("This technique has no CVE or CWE"), sec("Tickets are encrypted with a hash"), sec(label))
+    with pytest.raises(StageRuleError, match="lists the attack steps.*stage 3"):
+        check_stage(content, technique_pack(), WHY)
+
+
+def test_stage_2_may_mention_steps_inside_a_sentence():
+    content = stage2(inf("This technique has no CVE or CWE"), sec("Tickets are encrypted with a hash"),
+                     inf("The attackers steps are covered in stage 3, step by step"))
+    check_stage(content, technique_pack(), WHY)

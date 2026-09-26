@@ -513,3 +513,36 @@ def test_stage_3_prompt_keeps_the_possible_scenario_rule_for_undocumented_cves()
 
     system, _ = stage3_prompts(chain_pack("not_documented"))
     assert "Possible scenario" in system
+
+
+# ---- D-036: prompt wording after the first live technique run --------------------------------------
+
+
+def test_stage_1_prompt_keeps_it_short_and_names_no_algorithm():
+    system, _ = prompts()
+    assert "at most 10 blocks in total" in system
+    assert "name no algorithm such as RC4 or AES" in system
+
+
+def test_stage_2_prompt_explains_the_flaw_not_the_attackers_steps():
+    system, _ = prompts(number=2, previous=STAGE1)
+    assert "how the design flaw works" in system
+    assert "do not number attack steps" in system and "belong to stage 3" in system
+
+
+def test_glossary_rule_defines_a_term_in_the_first_stage_that_uses_it():
+    system, _ = prompts()
+    assert "Define a term in the glossary of the first stage whose text uses it" in system
+
+
+def test_every_sentence_of_a_sourced_block_must_be_supported_by_the_cited_url():
+    system, _ = prompts()
+    assert "must be supported by the entries the Pack records under that URL" in system
+    assert "put it in its own block tagged inference" in system and "as explained in stage 2" in system
+
+
+def test_stage_3_detail_may_keep_a_short_tie_back_to_stage_2():
+    from tests.test_frames import chain_pack
+
+    system, _ = stage3_prompts(chain_pack())
+    assert 'a short tie-back to stage 2 may stay in the same block' in system
